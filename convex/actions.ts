@@ -13,7 +13,7 @@ export const dispatchGithubBuild = action({
 		}
 
 		const response = await fetch(
-			"https://api.github.com/repos/meshtastic/firmware/actions/workflows/custom_build.yml/dispatches",
+			"https://api.github.com/repos/MeshEnvy/configurable-web-flasher/actions/workflows/custom_build.yml/dispatches",
 			{
 				method: "POST",
 				headers: {

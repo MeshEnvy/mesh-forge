@@ -1,0 +1,64 @@
+name: Custom Firmware Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target board (e.g. rak4631)'
+        required: true
+        type: string
+      flags:
+        description: 'Build flags (e.g. -DMESHTASTIC_EXCLUDE_MQTT)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Web Flasher (this repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout Firmware
+        uses: actions/checkout@v4
+        with:
+          repository: meshtastic/firmware
+          ref: develop
+          path: firmware
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build Firmware
+        working-directory: firmware
+        run: |
+          echo "Building for target: ${{ inputs.target }}"
+          echo "Flags: ${{ inputs.flags }}"
+          
+          # Inject flags into platformio.ini or environment if needed
+          # For now, we rely on PIO's ability to take env vars or just run the target
+          # Real implementation might need more complex flag handling
+          
+          # Example: export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
+          
+          pio run -e ${{ inputs.target }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ inputs.target }}
+          path: firmware/.pio/build/${{ inputs.target }}/firmware.bin
+
+      - name: Notify Convex
+        if: always()
+        run: |
+          # TODO: Send webhook to Convex with status
+          echo "Build finished with status: ${{ job.status }}"
