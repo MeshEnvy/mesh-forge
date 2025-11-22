@@ -18,6 +18,7 @@ export default defineSchema({
 		githubRunId: v.number(),
 		status: v.string(), // "queued", "in_progress", "success", "failure"
 		artifactUrl: v.optional(v.string()),
+		logs: v.optional(v.string()),
 		startedAt: v.number(),
 		completedAt: v.optional(v.number()),
 	}).index("by_profile", ["profileId"]),

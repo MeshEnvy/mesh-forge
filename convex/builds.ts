@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { api, } from "./_generated/api";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 export const triggerBuild = mutation({
 	args: {
@@ -17,7 +17,6 @@ export const triggerBuild = mutation({
 		}
 
 		// Convert config object to flags string
-		// e.g. { "NO_MQTT": true } -> "-DNO_MQTT"
 		const flags = Object.entries(profile.config)
 			.filter(([_, value]) => value === true)
 			.map(([key, _]) => `-D${key}`)
@@ -25,16 +24,18 @@ export const triggerBuild = mutation({
 
 		// Create build records for each target
 		for (const target of profile.targets) {
-			await ctx.db.insert("builds", {
+			const buildId = await ctx.db.insert("builds", {
 				profileId: profile._id,
 				target: target,
-				githubRunId: 0, // Placeholder, updated via webhook
+				githubRunId: 0,
 				status: "queued",
+				logs: "Build queued...",
 				startedAt: Date.now(),
 			});
 
 			// Schedule the action to dispatch GitHub workflow
 			await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
+				buildId: buildId,
 				target: target,
 				flags: flags,
 			});
@@ -50,5 +51,90 @@ export const listByProfile = query({
 			.withIndex("by_profile", (q) => q.eq("profileId", args.profileId))
 			.order("desc")
 			.take(10);
+	},
+});
+
+export const get = query({
+	args: { buildId: v.id("builds") },
+	handler: async (ctx, args) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) return null;
+
+		const build = await ctx.db.get(args.buildId);
+		if (!build) return null;
+
+		const profile = await ctx.db.get(build.profileId);
+		if (!profile || profile.userId !== userId) return null;
+
+		return build;
+	},
+});
+
+export const deleteBuild = mutation({
+	args: { buildId: v.id("builds") },
+	handler: async (ctx, args) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error("Unauthorized");
+
+		const build = await ctx.db.get(args.buildId);
+		if (!build) throw new Error("Build not found");
+
+		const profile = await ctx.db.get(build.profileId);
+		if (!profile || profile.userId !== userId) {
+			throw new Error("Unauthorized");
+		}
+
+		await ctx.db.delete(args.buildId);
+	},
+});
+
+export const retryBuild = mutation({
+	args: { buildId: v.id("builds") },
+	handler: async (ctx, args) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error("Unauthorized");
+
+		const build = await ctx.db.get(args.buildId);
+		if (!build) throw new Error("Build not found");
+
+		const profile = await ctx.db.get(build.profileId);
+		if (!profile || profile.userId !== userId) {
+			throw new Error("Unauthorized");
+		}
+
+		// Reset build status
+		await ctx.db.patch(args.buildId, {
+			status: "queued",
+			logs: "Build retry queued...",
+			startedAt: Date.now(),
+			completedAt: undefined,
+		});
+
+		// Retry the build
+		const flags = Object.entries(profile.config)
+			.filter(([_, value]) => value === true)
+			.map(([key, _]) => `-D${key}`)
+			.join(" ");
+
+		await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
+			buildId: args.buildId,
+			target: build.target,
+			flags: flags,
+		});
+	},
+});
+
+// Internal mutation to log errors from actions
+export const logBuildError = internalMutation({
+	args: {
+		buildId: v.id("builds"),
+		error: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.buildId, {
+			status: "failure",
+			logs: `Error triggering build: ${args.error}`,
+			completedAt: Date.now(),
+		});
 	},
 });

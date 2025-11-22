@@ -1,14 +1,18 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Plus } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import BuildsPanel from "@/components/BuildsPanel";
 import ProfileEditor from "@/components/ProfileEditor";
 import { Button } from "@/components/ui/button";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export default function Dashboard() {
 	const { signOut } = useAuthActions();
 	const profiles = useQuery(api.profiles.list);
+	const triggerBuild = useMutation(api.builds.triggerBuild);
 	const [isEditing, setIsEditing] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<any>(null);
 
@@ -20,6 +24,19 @@ export default function Dashboard() {
 	const handleCreate = () => {
 		setEditingProfile(null);
 		setIsEditing(true);
+	};
+
+	const handleBuild = async (profileId: Id<"profiles">) => {
+		try {
+			await triggerBuild({ profileId });
+			toast.success("Build started", {
+				description: "Check the build status below.",
+			});
+		} catch (error) {
+			toast.error("Build failed", {
+				description: String(error),
+			});
+		}
 	};
 
 	return (
@@ -65,7 +82,13 @@ export default function Dashboard() {
 									>
 										Edit
 									</Button>
-									<Button size="sm">Build</Button>
+									<Button size="sm" onClick={() => handleBuild(profile._id)}>
+										Build
+									</Button>
+								</div>
+
+								<div className="mt-4 pt-4 border-t border-slate-800">
+									<BuildsPanel profileId={profile._id} />
 								</div>
 							</div>
 						))}
