@@ -28,6 +28,16 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            firmware/.pio/libdeps
+          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
