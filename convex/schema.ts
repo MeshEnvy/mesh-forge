@@ -22,5 +22,14 @@ export default defineSchema({
 		logs: v.optional(v.string()),
 		startedAt: v.number(),
 		completedAt: v.optional(v.number()),
+		buildHash: v.optional(v.string()),
 	}).index("by_profile", ["profileId"]),
+
+	buildCache: defineTable({
+		buildHash: v.string(),
+		target: v.string(),
+		artifactUrl: v.string(),
+		version: v.string(),
+		createdAt: v.number(),
+	}).index("by_hash_target", ["buildHash", "target"]),
 });

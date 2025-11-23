@@ -8,6 +8,7 @@ export const dispatchGithubBuild = action({
 		target: v.string(),
 		flags: v.string(),
 		version: v.string(),
+		buildHash: v.string(),
 	},
 	handler: async (ctx, args) => {
 		const githubToken = process.env.GITHUB_TOKEN;
@@ -32,6 +33,7 @@ export const dispatchGithubBuild = action({
 							flags: args.flags,
 							version: args.version,
 							build_id: args.buildId,
+							build_hash: args.buildHash,
 							convex_url: process.env.CONVEX_SITE_URL,
 						},
 					}),

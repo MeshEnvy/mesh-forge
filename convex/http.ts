@@ -19,6 +19,7 @@ http.route({
     if (payload.action === "completed" && payload.build_id) {
       const status = payload.status === "success" ? "success" : "failure";
       
+      // Update build status - R2 URL will be constructed automatically from buildHash
       await ctx.runMutation(internal.builds.updateBuildStatus, {
         buildId: payload.build_id,
         status,

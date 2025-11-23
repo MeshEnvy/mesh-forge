@@ -18,6 +18,10 @@ on:
         description: 'Convex Build ID'
         required: true
         type: string
+      build_hash:
+        description: 'Build hash for artifact naming'
+        required: true
+        type: string
       convex_url:
         description: 'Convex Site URL'
         required: true
@@ -110,18 +114,36 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"buildId": "${{ inputs.build_id }}", "logs": "✅ Build completed successfully!\n"}'
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-${{ inputs.target }}
-          path: firmware/.pio/build/${{ inputs.target }}/firmware.bin
+      - name: Install AWS CLI (for R2)
+        if: success()
+        run: |
+          pip install awscli
 
-      - name: Log - Artifact uploaded
+      - name: Upload to R2
+        if: success()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+        run: |
+          # Determine file extension based on target (most are .bin, some might be .uf2)
+          BUILD_FILE="firmware/.pio/build/${{ inputs.target }}/firmware.bin"
+          if [ ! -f "$BUILD_FILE" ]; then
+            BUILD_FILE="firmware/.pio/build/${{ inputs.target }}/firmware.uf2"
+          fi
+          
+          # Upload to R2 with hash as filename
+          aws s3 cp "$BUILD_FILE" "s3://${{ secrets.R2_BUCKET_NAME }}/${{ inputs.build_hash }}.uf2" \
+            --endpoint-url "$AWS_ENDPOINT_URL"
+          
+          echo "✅ Uploaded to R2: ${{ inputs.build_hash }}.uf2"
+
+      - name: Log - Artifact uploaded to R2
         if: success()
         run: |
           curl -X POST "${{ inputs.convex_url }}/api/logs" \
             -H "Content-Type: application/json" \
-            -d '{"buildId": "${{ inputs.build_id }}", "logs": "📤 Artifact uploaded: firmware-${{ inputs.target }}\n"}'
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "📤 Artifact uploaded to R2: ${{ inputs.build_hash }}.uf2\n"}'
 
       - name: Log - Build failed
         if: failure()

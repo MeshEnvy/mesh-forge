@@ -3,6 +3,84 @@ import { v } from "convex/values";
 import { api, } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 
+/**
+ * Normalizes a config object to a stable JSON string for hashing.
+ * Sorts keys and handles values consistently.
+ */
+function normalizeConfig(config: any): string {
+	const normalized: Record<string, any> = {};
+	
+	// Sort keys and process values
+	const sortedKeys = Object.keys(config || {}).sort();
+	
+	for (const key of sortedKeys) {
+		const value = config[key];
+		// Only include non-null, non-undefined values
+		if (value !== null && value !== undefined) {
+			// Normalize boolean, number, and string values
+			if (typeof value === "boolean") {
+				normalized[key] = value;
+			} else if (typeof value === "number") {
+				normalized[key] = value;
+			} else if (typeof value === "string") {
+				// Only include non-empty strings
+				if (value.trim() !== "") {
+					normalized[key] = value.trim();
+				}
+			}
+		}
+	}
+	
+	return JSON.stringify(normalized);
+}
+
+/**
+ * Computes a stable SHA-256 hash from version, target, and config.
+ * This hash uniquely identifies a build configuration.
+ */
+async function computeBuildHash(
+	version: string,
+	target: string,
+	config: any,
+): Promise<string> {
+	const normalizedConfig = normalizeConfig(config);
+	const input = JSON.stringify({
+		version,
+		target,
+		config: normalizedConfig,
+	});
+	
+	// Use Web Crypto API for SHA-256 hashing
+	const encoder = new TextEncoder();
+	const data = encoder.encode(input);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+	const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+	
+	return hashHex;
+}
+
+/**
+ * Constructs the R2 artifact URL from a build hash.
+ * Uses the R2 public URL pattern: https://<bucket>.<account-id>.r2.cloudflarestorage.com/<hash>.uf2
+ * Or custom domain if R2_PUBLIC_URL is set.
+ */
+function getR2ArtifactUrl(buildHash: string): string {
+	const r2PublicUrl = process.env.R2_PUBLIC_URL;
+	if (r2PublicUrl) {
+		// Custom domain configured
+		return `${r2PublicUrl}/${buildHash}.uf2`;
+	}
+	// Default R2 public URL pattern (requires public bucket)
+	const bucketName = process.env.R2_BUCKET_NAME || "firmware-builds";
+	const accountId = process.env.R2_ACCOUNT_ID || "";
+	if (accountId) {
+		return `https://${bucketName}.${accountId}.r2.cloudflarestorage.com/${buildHash}.uf2`;
+	}
+	// Fallback: assume custom domain or public bucket URL
+	return `https://${bucketName}.r2.cloudflarestorage.com/${buildHash}.uf2`;
+}
+
 export const triggerBuild = mutation({
 	args: {
 		profileId: v.id("profiles"),
@@ -18,28 +96,68 @@ export const triggerBuild = mutation({
 
 		// Convert config object to flags string
 		const flags = Object.entries(profile.config)
-			.filter(([_, value]) => value === true)
-			.map(([key, _]) => `-D${key}`)
+			.map(([key, value]) => {
+				if (value === true) return `-D${key}`;
+				if (typeof value === "number") return `-D${key}=${value}`;
+				if (typeof value === "string" && value.trim() !== "")
+					return `-D${key}=${value}`;
+				return null;
+			})
+			.filter(Boolean)
 			.join(" ");
 
 		// Create build records for each target
 		for (const target of profile.targets) {
-			const buildId = await ctx.db.insert("builds", {
-				profileId: profile._id,
-				target: target,
-				githubRunId: 0,
-				status: "queued",
-				logs: "Build queued...",
-				startedAt: Date.now(),
-			});
+			// Compute build hash
+			const buildHash = await computeBuildHash(
+				profile.version,
+				target,
+				profile.config,
+			);
 
-			// Schedule the action to dispatch GitHub workflow
-			await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
-				buildId: buildId,
-				target: target,
-				flags: flags,
-				version: profile.version,
-			});
+			// Check cache for existing build
+			const cached = await ctx.db
+				.query("buildCache")
+				.withIndex("by_hash_target", (q) =>
+					q.eq("buildHash", buildHash).eq("target", target),
+				)
+				.first();
+
+			if (cached) {
+				// Use cached artifact, skip GitHub workflow
+				const artifactUrl = getR2ArtifactUrl(buildHash);
+				const buildId = await ctx.db.insert("builds", {
+					profileId: profile._id,
+					target: target,
+					githubRunId: 0,
+					status: "success",
+					artifactUrl: artifactUrl,
+					logs: "Build completed from cache",
+					startedAt: Date.now(),
+					completedAt: Date.now(),
+					buildHash: buildHash,
+				});
+			} else {
+				// Not cached, proceed with normal build flow
+				const buildId = await ctx.db.insert("builds", {
+					profileId: profile._id,
+					target: target,
+					githubRunId: 0,
+					status: "queued",
+					logs: "Build queued...",
+					startedAt: Date.now(),
+					buildHash: buildHash,
+				});
+
+				// Schedule the action to dispatch GitHub workflow
+				await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
+					buildId: buildId,
+					target: target,
+					flags: flags,
+					version: profile.version,
+					buildHash: buildHash,
+				});
+			}
 		}
 	},
 });
@@ -68,6 +186,14 @@ export const get = query({
 		if (!profile || profile.userId !== userId) return null;
 
 		return build;
+	},
+});
+
+// Internal query to get build without auth checks (for webhooks)
+export const getInternal = internalMutation({
+	args: { buildId: v.id("builds") },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.buildId);
 	},
 });
 
@@ -113,15 +239,29 @@ export const retryBuild = mutation({
 
 		// Retry the build
 		const flags = Object.entries(profile.config)
-			.filter(([_, value]) => value === true)
-			.map(([key, _]) => `-D${key}`)
+			.map(([key, value]) => {
+				if (value === true) return `-D${key}`;
+				if (typeof value === "number") return `-D${key}=${value}`;
+				if (typeof value === "string" && value.trim() !== "")
+					return `-D${key}=${value}`;
+				return null;
+			})
+			.filter(Boolean)
 			.join(" ");
+
+		// Compute build hash for retry
+		const buildHash = await computeBuildHash(
+			profile.version,
+			build.target,
+			profile.config,
+		);
 
 		await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
 			buildId: args.buildId,
 			target: build.target,
 			flags: flags,
 			version: profile.version,
+			buildHash: buildHash,
 		});
 	},
 });
@@ -162,11 +302,56 @@ export const updateBuildStatus = internalMutation({
 	args: {
 		buildId: v.id("builds"),
 		status: v.union(v.literal("success"), v.literal("failure")),
+		artifactUrl: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.buildId, {
+		const build = await ctx.db.get(args.buildId);
+		if (!build) return;
+
+		const updateData: any = {
 			status: args.status,
 			completedAt: Date.now(),
-		});
+		};
+
+		if (args.artifactUrl) {
+			updateData.artifactUrl = args.artifactUrl;
+		}
+
+		await ctx.db.patch(args.buildId, updateData);
+
+		// If build succeeded and we have buildHash, store in cache with R2 URL
+		if (args.status === "success" && build.buildHash && build.target) {
+			// Get version from profile
+			const profile = await ctx.db.get(build.profileId);
+			if (profile) {
+				// Construct R2 URL from hash
+				const artifactUrl = getR2ArtifactUrl(build.buildHash);
+				
+				// Update build with R2 URL if not already set
+				if (!args.artifactUrl) {
+					updateData.artifactUrl = artifactUrl;
+					await ctx.db.patch(args.buildId, { artifactUrl });
+				}
+
+				// Check if cache entry already exists
+				const existing = await ctx.db
+					.query("buildCache")
+					.withIndex("by_hash_target", (q) =>
+						q.eq("buildHash", build.buildHash!).eq("target", build.target),
+					)
+					.first();
+
+				if (!existing) {
+					// Store in cache
+					await ctx.db.insert("buildCache", {
+						buildHash: build.buildHash,
+						target: build.target,
+						artifactUrl: artifactUrl,
+						version: profile.version,
+						createdAt: Date.now(),
+					});
+				}
+			}
+		}
 	},
 });
