@@ -14,13 +14,33 @@ on:
       version:
         description: 'Firmware Version (Tag/Branch)'
         required: true
+      build_id:
+        description: 'Convex Build ID'
+        required: true
+        type: string
+      convex_url:
+        description: 'Convex Site URL'
+        required: true
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Log - Build Started
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "🚀 Build started for ${{ inputs.target }}\n"}'
+
       - name: Checkout Web Flasher (this repo)
         uses: actions/checkout@v4
+
+      - name: Log - Checked out web flasher
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "✓ Checked out web flasher repo\n"}'
 
       - name: Checkout Firmware
         uses: actions/checkout@v4
@@ -30,6 +50,12 @@ jobs:
           path: firmware
           submodules: recursive
           fetch-depth: 1
+
+      - name: Log - Checked out firmware
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "✓ Checked out firmware ${{ inputs.version }}\n"}'
 
       - name: Cache PlatformIO
         uses: actions/cache@v4
@@ -46,10 +72,22 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Log - Installing PlatformIO
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "📦 Installing PlatformIO...\n"}'
+
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
           pip install platformio
+
+      - name: Log - Building firmware
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "🔨 Building firmware for ${{ inputs.target }}...\n"}'
 
       - name: Build Firmware
         working-directory: firmware
@@ -65,14 +103,42 @@ jobs:
           
           pio run -e ${{ inputs.target }}
 
+      - name: Log - Build complete
+        if: success()
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "✅ Build completed successfully!\n"}'
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ inputs.target }}
           path: firmware/.pio/build/${{ inputs.target }}/firmware.bin
 
-      - name: Notify Convex
+      - name: Log - Artifact uploaded
+        if: success()
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "📤 Artifact uploaded: firmware-${{ inputs.target }}\n"}'
+
+      - name: Log - Build failed
+        if: failure()
+        run: |
+          curl -X POST "${{ inputs.convex_url }}/api/logs" \
+            -H "Content-Type: application/json" \
+            -d '{"buildId": "${{ inputs.build_id }}", "logs": "❌ Build failed - check GitHub Actions logs for details\n"}'
+
+      - name: Update Build Status
         if: always()
         run: |
-          # TODO: Send webhook to Convex with status
-          echo "Build finished with status: ${{ job.status }}"
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            STATUS_MSG="success"
+          else
+            STATUS_MSG="failure"
+          fi
+          curl -X POST "${{ inputs.convex_url }}/github-webhook" \
+            -H "Content-Type: application/json" \
+            -d "{\"action\": \"completed\", \"build_id\": \"${{ inputs.build_id }}\", \"status\": \"$STATUS_MSG\"}"

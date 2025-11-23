@@ -140,3 +140,33 @@ export const logBuildError = internalMutation({
 		});
 	},
 });
+
+// Internal mutation to append logs
+export const appendLogs = internalMutation({
+	args: {
+		buildId: v.id("builds"),
+		logs: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const build = await ctx.db.get(args.buildId);
+		if (!build) return;
+
+		await ctx.db.patch(args.buildId, {
+			logs: (build.logs || "") + args.logs,
+		});
+	},
+});
+
+// Internal mutation to update build status
+export const updateBuildStatus = internalMutation({
+	args: {
+		buildId: v.id("builds"),
+		status: v.union(v.literal("success"), v.literal("failure")),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.buildId, {
+			status: args.status,
+			completedAt: Date.now(),
+		});
+	},
+});

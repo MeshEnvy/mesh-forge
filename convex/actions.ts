@@ -31,6 +31,8 @@ export const dispatchGithubBuild = action({
 							target: args.target,
 							flags: args.flags,
 							version: args.version,
+							build_id: args.buildId,
+							convex_url: process.env.CONVEX_SITE_URL,
 						},
 					}),
 				},
