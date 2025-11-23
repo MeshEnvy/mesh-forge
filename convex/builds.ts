@@ -99,7 +99,7 @@ export const triggerBuild = mutation({
 			if (cached) {
 				// Use cached artifact, skip GitHub workflow
 				const artifactUrl = getR2ArtifactUrl(buildHash);
-				const _buildId = await ctx.db.insert("builds", {
+				await ctx.db.insert("builds", {
 					profileId: profile._id,
 					target: target,
 					githubRunId: 0,
