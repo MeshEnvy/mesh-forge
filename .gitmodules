@@ -3,7 +3,7 @@
 	url = https://github.com/meshtastic/web-flasher
 [submodule "vendor/firmware"]
 	path = vendor/firmware
-	url = git@github.com:meshtastic/firmware.git
+	url = https://github.com/meshtastic/firmware.git
 [submodule "vendor/api"]
 	path = vendor/api
-	url = git@github.com:meshtastic/api.git
+	url = https://github.com/meshtastic/api.git
