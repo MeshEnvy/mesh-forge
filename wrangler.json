@@ -1,0 +1,10 @@
+{
+  "name": "react-web-flasher",
+  "compatibility_date": "2024-09-23",
+  "assets": {
+    "directory": "./dist"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

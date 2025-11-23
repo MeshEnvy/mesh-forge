@@ -5,10 +5,11 @@
 	"type": "module",
 	"scripts": {
 		"generate:versions": "node scripts/generate-versions.js",
-		"dev": "npm run generate:versions && vite",
-		"build": "npm run generate:versions && tsc && vite build",
+		"dev": "bun run generate:versions && vite",
+		"build": "bun run generate:versions && tsc && vite build",
 		"lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"deploy": "bun run build && wrangler deploy"
 	},
 	"dependencies": {
 		"@convex-dev/auth": "^0.0.90",
@@ -43,6 +44,7 @@
 		"postcss": "^8.5.6",
 		"tailwindcss": "^4.1.17",
 		"typescript": "^5.0.2",
-		"vite": "^4.3.9"
+		"vite": "^4.3.9",
+		"wrangler": "^4.50.0"
 	}
 }
