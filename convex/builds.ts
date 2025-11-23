@@ -5,50 +5,19 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import modulesData from "./modules.json";
 
 /**
- * Normalizes a config object to a stable JSON string for hashing.
- * Sorts keys and handles values consistently.
- */
-function normalizeConfig(config: any): string {
-	const normalized: Record<string, any> = {};
-	
-	// Sort keys and process values
-	const sortedKeys = Object.keys(config || {}).sort();
-	
-	for (const key of sortedKeys) {
-		const value = config[key];
-		// Only include non-null, non-undefined values
-		if (value !== null && value !== undefined) {
-			// Normalize boolean, number, and string values
-			if (typeof value === "boolean") {
-				normalized[key] = value;
-			} else if (typeof value === "number") {
-				normalized[key] = value;
-			} else if (typeof value === "string") {
-				// Only include non-empty strings
-				if (value.trim() !== "") {
-					normalized[key] = value.trim();
-				}
-			}
-		}
-	}
-	
-	return JSON.stringify(normalized);
-}
-
-/**
- * Computes a stable SHA-256 hash from version, target, and config.
- * This hash uniquely identifies a build configuration.
+ * Computes a stable SHA-256 hash from version, target, and flags.
+ * This hash uniquely identifies a build configuration based on what is actually executed.
  */
 async function computeBuildHash(
 	version: string,
 	target: string,
-	config: any,
+	flags: string,
 ): Promise<string> {
-	const normalizedConfig = normalizeConfig(config);
+	// Input is now the exact parameters used for the build
 	const input = JSON.stringify({
 		version,
 		target,
-		config: normalizedConfig,
+		flags,
 	});
 	
 	// Use Web Crypto API for SHA-256 hashing
@@ -110,12 +79,14 @@ export const triggerBuild = mutation({
 
 		// Create build records for each target
 		for (const target of profile.targets) {
-			// Compute build hash
+			// Compute build hash using the generated flags
 			const buildHash = await computeBuildHash(
 				profile.version,
 				target,
-				profile.config,
+				flagsString,
 			);
+			
+			console.log(`Computed build hash for ${target}: ${buildHash} (Flags: ${flagsString})`);
 
 			// Check cache for existing build
 			const cached = await ctx.db
@@ -252,12 +223,14 @@ export const retryBuild = mutation({
 		
 		const flagsString = flags.join(" ");
 
-		// Compute build hash for retry
+		// Compute build hash for retry using flags
 		const buildHash = await computeBuildHash(
 			profile.version,
 			build.target,
-			profile.config,
+			flagsString,
 		);
+		
+		console.log(`Computed retry hash: ${buildHash} (Flags: ${flagsString})`);
 
 		await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
 			buildId: args.buildId,

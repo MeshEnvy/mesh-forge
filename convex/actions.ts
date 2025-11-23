@@ -16,6 +16,20 @@ export const dispatchGithubBuild = action({
 			throw new Error("GITHUB_TOKEN is not set");
 		}
 
+		const payload = {
+			ref: "main", // or make this configurable
+			inputs: {
+				target: args.target,
+				flags: args.flags,
+				version: args.version,
+				build_id: args.buildId,
+				build_hash: args.buildHash,
+				convex_url: process.env.CONVEX_SITE_URL,
+			},
+		};
+
+		console.log("Dispatching GitHub build with payload:", JSON.stringify(payload, null, 2));
+
 		try {
 			const response = await fetch(
 				"https://api.github.com/repos/MeshEnvy/configurable-web-flasher/actions/workflows/custom_build.yml/dispatches",
@@ -26,17 +40,7 @@ export const dispatchGithubBuild = action({
 						Accept: "application/vnd.github.v3+json",
 						"Content-Type": "application/json",
 					},
-					body: JSON.stringify({
-						ref: "main", // or make this configurable
-						inputs: {
-							target: args.target,
-							flags: args.flags,
-							version: args.version,
-							build_id: args.buildId,
-							build_hash: args.buildHash,
-							convex_url: process.env.CONVEX_SITE_URL,
-						},
-					}),
+					body: JSON.stringify(payload),
 				},
 			);
 
