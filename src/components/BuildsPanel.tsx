@@ -1,16 +1,16 @@
 import { useMutation, useQuery } from "convex/react";
 import {
-	Clock,
 	CheckCircle,
-	XCircle,
+	Clock,
 	Loader2,
-	Trash2,
 	RotateCw,
-	ExternalLink,
+	Trash2,
+	XCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { timeAgo } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -84,77 +84,64 @@ export default function BuildsPanel({ profileId }: BuildsPanelProps) {
 	}
 
 	return (
-		<div className="space-y-3">
-			<h3 className="text-lg font-semibold">Build History</h3>
-			{builds.map((build) => (
-				<div
-					key={build._id}
-					className="border border-slate-800 rounded-lg p-4 bg-slate-900/30"
-				>
-					<div className="flex items-start justify-between mb-2">
+		<div className="space-y-2">
+			<h3 className="text-lg font-semibold mb-3">Build Status</h3>
+			<div className="space-y-1">
+				{builds.map((build) => (
+					<div
+						key={build._id}
+						className="group flex items-center justify-between p-2 rounded-md hover:bg-slate-800/50 transition-colors border border-transparent hover:border-slate-800"
+					>
 						<Link
 							to={`/builds/${build._id}`}
-							className="flex items-center gap-2 hover:opacity-80"
+							className="flex items-center gap-3 flex-1 min-w-0"
 						>
 							{getStatusIcon(build.status)}
-							<span className="font-medium hover:underline">
+							<span className="font-medium text-sm truncate min-w-[100px]">
 								{build.target}
 							</span>
-							<span className={`text-sm ${getStatusColor(build.status)}`}>
+							<span className={`text-xs ${getStatusColor(build.status)}`}>
 								{build.status}
 							</span>
+							<span
+								className="text-xs text-slate-500 ml-auto mr-4 whitespace-nowrap"
+								title={new Date(build.startedAt).toLocaleString()}
+							>
+								{timeAgo(build.startedAt)}
+							</span>
 						</Link>
-						<div className="flex gap-2">
+
+						<div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
 							{build.status === "failure" && (
 								<Button
-									size="sm"
+									size="icon"
 									variant="ghost"
-									onClick={() => handleRetry(build._id)}
+									className="h-8 w-8 text-slate-400 hover:text-white"
+									onClick={(e) => {
+										e.preventDefault();
+										handleRetry(build._id);
+									}}
+									title="Retry Build"
 								>
 									<RotateCw className="w-4 h-4" />
 								</Button>
 							)}
 							<Button
-								size="sm"
+								size="icon"
 								variant="ghost"
-								onClick={() => handleDelete(build._id)}
+								className="h-8 w-8 text-slate-400 hover:text-red-400"
+								onClick={(e) => {
+									e.preventDefault();
+									handleDelete(build._id);
+								}}
+								title="Delete Build"
 							>
 								<Trash2 className="w-4 h-4" />
 							</Button>
 						</div>
 					</div>
-
-					{build.logs && (
-						<pre className="text-xs bg-slate-950 p-2 rounded mt-2 overflow-x-auto text-slate-400 max-h-32 overflow-y-auto">
-							{build.logs.split("\n").slice(-5).join("\n")}
-						</pre>
-					)}
-
-					<div className="flex items-center justify-between mt-3">
-						<Link
-							to={`/builds/${build._id}`}
-							className="text-sm text-cyan-400 hover:underline flex items-center gap-1"
-						>
-							View Details <ExternalLink className="w-3 h-3" />
-						</Link>
-
-						{build.artifactUrl && (
-							<a
-								href={build.artifactUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="text-sm text-cyan-400 hover:underline"
-							>
-								Download Artifact →
-							</a>
-						)}
-					</div>
-
-					<div className="text-xs text-slate-500 mt-2">
-						Started: {new Date(build.startedAt).toLocaleString()}
-					</div>
-				</div>
-			))}
+				))}
+			</div>
 		</div>
 	);
 }
