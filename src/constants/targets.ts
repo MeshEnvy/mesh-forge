@@ -3,6 +3,7 @@ import hardwareList from "../../vendor/web-flasher/public/data/hardware-list.jso
 export interface TargetMetadata {
 	name: string;
 	category: string;
+	architecture?: string;
 }
 
 export const TARGETS: Record<string, TargetMetadata> = {};
@@ -17,6 +18,7 @@ sortedHardware.forEach((hw) => {
 		TARGETS[hw.platformioTarget] = {
 			name: hw.displayName || hw.platformioTarget,
 			category: hw.tags?.[0] || "Other",
+			architecture: hw.architecture,
 		};
 	}
 });

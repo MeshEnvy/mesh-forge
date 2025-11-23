@@ -1,7 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { api, } from "./_generated/api";
+import { api } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
+import modulesData from "./modules.json";
 
 /**
  * Normalizes a config object to a stable JSON string for hashing.
@@ -95,16 +96,17 @@ export const triggerBuild = mutation({
 		}
 
 		// Convert config object to flags string
-		const flags = Object.entries(profile.config)
-			.map(([key, value]) => {
-				if (value === true) return `-D${key}`;
-				if (typeof value === "number") return `-D${key}=${value}`;
-				if (typeof value === "string" && value.trim() !== "")
-					return `-D${key}=${value}`;
-				return null;
-			})
-			.filter(Boolean)
-			.join(" ");
+		const flags: string[] = [];
+
+		// Handle Modules (Inverted Logic: Default Excluded)
+		for (const module of modulesData.modules) {
+			// If config[id] is NOT false (explicitly included), we exclude it.
+			if (profile.config[module.id] !== false) {
+				flags.push(`-D${module.id}=1`);
+			}
+		}
+		
+		const flagsString = flags.join(" ");
 
 		// Create build records for each target
 		for (const target of profile.targets) {
@@ -126,7 +128,7 @@ export const triggerBuild = mutation({
 			if (cached) {
 				// Use cached artifact, skip GitHub workflow
 				const artifactUrl = getR2ArtifactUrl(buildHash);
-				const buildId = await ctx.db.insert("builds", {
+				const _buildId = await ctx.db.insert("builds", {
 					profileId: profile._id,
 					target: target,
 					githubRunId: 0,
@@ -153,7 +155,7 @@ export const triggerBuild = mutation({
 				await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
 					buildId: buildId,
 					target: target,
-					flags: flags,
+					flags: flagsString,
 					version: profile.version,
 					buildHash: buildHash,
 				});
@@ -237,17 +239,18 @@ export const retryBuild = mutation({
 			completedAt: undefined,
 		});
 
-		// Retry the build
-		const flags = Object.entries(profile.config)
-			.map(([key, value]) => {
-				if (value === true) return `-D${key}`;
-				if (typeof value === "number") return `-D${key}=${value}`;
-				if (typeof value === "string" && value.trim() !== "")
-					return `-D${key}=${value}`;
-				return null;
-			})
-			.filter(Boolean)
-			.join(" ");
+		// Convert config object to flags string
+		const flags: string[] = [];
+
+		// Handle Modules (Inverted Logic: Default Excluded)
+		for (const module of modulesData.modules) {
+			// If config[id] is NOT false (explicitly included), we exclude it.
+			if (profile.config[module.id] !== false) {
+				flags.push(`-D${module.id}=1`);
+			}
+		}
+		
+		const flagsString = flags.join(" ");
 
 		// Compute build hash for retry
 		const buildHash = await computeBuildHash(
@@ -259,7 +262,7 @@ export const retryBuild = mutation({
 		await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
 			buildId: args.buildId,
 			target: build.target,
-			flags: flags,
+			flags: flagsString,
 			version: profile.version,
 			buildHash: buildHash,
 		});

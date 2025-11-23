@@ -5,8 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"generate:versions": "node scripts/generate-versions.js",
-		"dev": "bun run generate:versions && bun run scan:options && vite",
-		"build": "bun run generate:versions && bun run scan:options && tsc && vite build",
+		"dev": "bun run generate:versions && vite",
+		"build": "bun run generate:versions && tsc && vite build",
 		"lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
 		"preview": "vite preview",
 		"deploy": "npx convex deploy --cmd 'bun run build' && wrangler deploy"

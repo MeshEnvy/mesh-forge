@@ -1,0 +1,159 @@
+{
+  "modules": [
+    {
+      "id": "MESHTASTIC_EXCLUDE_ADMIN",
+      "name": "Admin",
+      "description": "Remote device configuration and management. Allows changing settings, reading device info, and rebooting nodes over the mesh network."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_ATAK",
+      "name": "ATAK Plugin",
+      "description": "Integration with ATAK (Android Team Awareness Kit) for tactical situational awareness. Enables military/emergency response coordination."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_AUDIO",
+      "name": "Audio",
+      "description": "Audio codec support for voice communication over the mesh."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_BLUETOOTH",
+      "name": "Bluetooth",
+      "description": "Bluetooth connectivity for pairing with phones and apps. Required for mobile app communication on most devices."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_CANNEDMESSAGES",
+      "name": "Canned Messages",
+      "description": "Pre-defined quick messages that can be sent with button presses. Useful for devices with limited input (no keyboard). Includes on-screen keyboard for some devices."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_DETECTIONSENSOR",
+      "name": "Detection Sensor",
+      "description": "Motion/presence detection sensor integration. Broadcasts detection events when sensors trigger (PIR, door switches, etc.)."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR",
+      "name": "Environmental Sensor",
+      "description": "Environmental monitoring sensors including temperature, humidity, pressure, air quality, and light sensors. Broadcasts telemetry data to the mesh."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION",
+      "name": "External Notification",
+      "description": "Drive external LEDs, buzzers, and speakers for notifications. Plays RTTTL ringtones and can control GPIO outputs when messages arrive."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_GPS",
+      "name": "GPS",
+      "description": "GPS receiver support for position tracking and sharing. Disabling prevents position broadcasts but the device still relays position packets for other nodes."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY",
+      "name": "Health Telemetry",
+      "description": "Heart rate and health monitoring sensors (like MAX30102 pulse oximeter). Broadcasts health metrics to the mesh."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_I2C",
+      "name": "I2C",
+      "description": "I2C bus support for external sensors and peripherals. Required for most sensor modules and OLED displays."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_INPUTBROKER",
+      "name": "Input Broker",
+      "description": "Input device handling (buttons, encoders, touchscreens). Routes button presses to appropriate modules like Canned Messages."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_MQTT",
+      "name": "MQTT",
+      "description": "MQTT client for cloud integration. Publishes mesh messages to MQTT brokers and subscribes to receive cloud messages. Enables IoT integration and remote monitoring."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_NEIGHBORINFO",
+      "name": "Neighbor Info",
+      "description": "Broadcasts information about directly-reachable neighbor nodes including signal strength (SNR). Helps build mesh topology maps and track network health."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_PAXCOUNTER",
+      "name": "Pax Counter",
+      "description": "Counts nearby WiFi and Bluetooth devices for crowd density estimation. Useful for people-counting in public spaces."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_PKI",
+      "name": "PKI",
+      "description": "Public Key Infrastructure for enhanced security and key verification between nodes."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_POWERMON",
+      "name": "Power Monitor",
+      "description": "Battery and power monitoring hardware support (INA260, INA219, etc.). Tracks voltage, current, and power consumption."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_POWER_FSM",
+      "name": "Power FSM",
+      "description": "Power management finite state machine. Handles sleep modes, power state transitions, and battery optimization."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_POWER_TELEMETRY",
+      "name": "Power Telemetry",
+      "description": "Broadcasts battery voltage, current, and power consumption data to the mesh. Different from Power Monitor which is the hardware interface."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_POWERSTRESS",
+      "name": "Power Stress",
+      "description": "Power consumption testing tool. Stresses the device to measure battery life under various transmission patterns. For development/testing only."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_RANGETEST",
+      "name": "Range Test",
+      "description": "Mesh range and signal quality testing. Sends periodic packets and logs signal strength (RSSI), SNR, and packet loss statistics to a file."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_REMOTEHARDWARE",
+      "name": "Remote Hardware",
+      "description": "Remote GPIO control over the mesh. Read/write digital pins, read ADC values, and control hardware on remote nodes."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_SCREEN",
+      "name": "Screen",
+      "description": "OLED/E-Ink display support. Shows messages, node info, and status on screen. Disabling saves power but removes visual feedback."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_SERIAL",
+      "name": "Serial",
+      "description": "Serial port communication for sensors and external devices. Can relay serial data over the mesh and supports NMEA GPS bridging."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_STOREFORWARD",
+      "name": "Store & Forward",
+      "description": "Message store-and-forward server for offline nodes. Router devices can cache messages and replay them when distant nodes reconnect. Requires PSRAM."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_TEXTMESSAGE",
+      "name": "Text Messaging",
+      "description": "Send and receive text messages between nodes. Displays messages on OLED screens and forwards to connected apps. **Important:** Disabling prevents sending/receiving but the node still relays messages for others."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_TRACEROUTE",
+      "name": "Traceroute",
+      "description": "Network path tracing tool. Shows the route packets take through the mesh, including all intermediate hops and hop limits."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_TZ",
+      "name": "Timezone",
+      "description": "Timezone database support for local time display. Allows devices to show correct local time based on GPS position."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_WAYPOINT",
+      "name": "Waypoint",
+      "description": "Share and display waypoints (points of interest) on the mesh. Shows waypoints on screen and in apps for navigation and location marking."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_WEBSERVER",
+      "name": "Web Server",
+      "description": "Built-in web interface for device configuration. Automatically excluded if WiFi is disabled."
+    },
+    {
+      "id": "MESHTASTIC_EXCLUDE_WIFI",
+      "name": "WiFi",
+      "description": "WiFi connectivity for network access, web server, and MQTT. Disabling saves power but removes WiFi features including the web interface."
+    }
+  ]
+}

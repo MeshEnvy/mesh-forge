@@ -99,11 +99,9 @@ jobs:
           echo "Building for target: ${{ inputs.target }}"
           echo "Flags: ${{ inputs.flags }}"
           
-          # Inject flags into platformio.ini or environment if needed
-          # For now, we rely on PIO's ability to take env vars or just run the target
-          # Real implementation might need more complex flag handling
-          
-          # Example: export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
+          # Inject flags into platformio.ini or environment
+          export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
+          echo "PLATFORMIO_BUILD_FLAGS set to: $PLATFORMIO_BUILD_FLAGS"
           
           pio run -e ${{ inputs.target }}
 

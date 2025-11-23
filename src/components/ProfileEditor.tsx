@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { api } from "../../convex/_generated/api";
+import modulesData from "../../convex/modules.json";
 import { TARGETS } from "../constants/targets";
 import { VERSIONS } from "../constants/versions";
+import { ModuleCard } from "./ModuleCard";
 
 interface ProfileEditorProps {
 	initialData?: any;
@@ -26,10 +28,7 @@ export default function ProfileEditor({
 		defaultValues: initialData || {
 			name: "",
 			targets: [],
-			config: {
-				MESHTASTIC_EXCLUDE_MQTT: false,
-				MESHTASTIC_EXCLUDE_AUDIO: false,
-			},
+			config: {},
 			version: VERSIONS[0],
 		},
 	});
@@ -99,18 +98,22 @@ export default function ProfileEditor({
 		>
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 				<div>
-					<label className="block text-sm font-medium mb-2">Profile Name</label>
+					<label htmlFor="name" className="block text-sm font-medium mb-2">
+						Profile Name
+					</label>
 					<Input
+						id="name"
 						{...register("name")}
 						className="bg-slate-950 border-slate-800"
 						placeholder="e.g. Solar Repeater"
 					/>
 				</div>
 				<div>
-					<label className="block text-sm font-medium mb-2">
+					<label htmlFor="version" className="block text-sm font-medium mb-2">
 						Firmware Version
 					</label>
 					<select
+						id="version"
 						{...register("version")}
 						className="w-full h-10 px-3 rounded-md border border-slate-800 bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-950"
 					>
@@ -125,8 +128,6 @@ export default function ProfileEditor({
 
 			<div>
 				<label className="block text-sm font-medium mb-2">Targets</label>
-				{/* ... existing target UI */}
-
 				<div className="space-y-4">
 					{/* Category Pills */}
 					<div className="flex flex-wrap gap-2">
@@ -173,6 +174,11 @@ export default function ProfileEditor({
 										className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
 									>
 										{item.name}
+										{item.architecture && (
+											<span className="ml-2 text-xs text-slate-500">
+												({item.architecture})
+											</span>
+										)}
 									</label>
 								</div>
 							))}
@@ -181,36 +187,43 @@ export default function ProfileEditor({
 				</div>
 			</div>
 
-			<div>
-				<label className="block text-sm font-medium mb-2">
-					Configuration Flags
-				</label>
-				<div className="space-y-2">
-					<div className="flex items-center space-x-2">
-						<Checkbox
-							id="no_mqtt"
-							checked={watch("config.MESHTASTIC_EXCLUDE_MQTT")}
-							onCheckedChange={(checked) =>
-								setValue("config.MESHTASTIC_EXCLUDE_MQTT", checked)
-							}
-						/>
-						<label htmlFor="no_mqtt">Exclude MQTT</label>
+			<div className="space-y-6">
+				<div>
+					<div className="mb-4">
+						<h3 className="text-lg font-medium">Modules</h3>
+						<p className="text-sm text-slate-400">
+							Select the modules to include in your build.
+						</p>
 					</div>
-					<div className="flex items-center space-x-2">
-						<Checkbox
-							id="no_audio"
-							checked={watch("config.MESHTASTIC_EXCLUDE_AUDIO")}
-							onCheckedChange={(checked) =>
-								setValue("config.MESHTASTIC_EXCLUDE_AUDIO", checked)
-							}
-						/>
-						<label htmlFor="no_audio">Exclude Audio</label>
+					<div className="flex flex-col gap-2">
+						{modulesData.modules.map((module) => {
+							// Inverted logic:
+							// config[id] === false -> Explicitly Included
+							// config[id] === true or undefined -> Excluded
+							const configValue = watch(`config.${module.id}`);
+							const isIncluded = configValue === false;
+
+							return (
+								<ModuleCard
+									key={module.id}
+									name={module.name}
+									description={module.description}
+									selected={isIncluded}
+									onClick={() => {
+										// Toggle:
+										// If currently included (true), we want to exclude (set config to true)
+										// If currently excluded (false), we want to include (set config to false)
+										setValue(`config.${module.id}`, !!isIncluded);
+									}}
+								/>
+							);
+						})}
 					</div>
 				</div>
 			</div>
 
-			<div className="flex gap-2 justify-end">
-				<Button type="button" variant="ghost" onClick={onCancel}>
+			<div className="flex justify-end gap-4 pt-4">
+				<Button type="button" variant="outline" onClick={onCancel}>
 					Cancel
 				</Button>
 				<Button type="submit">Save Profile</Button>
