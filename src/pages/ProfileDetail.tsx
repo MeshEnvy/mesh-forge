@@ -1,4 +1,5 @@
-import { useMutation, useQuery } from 'convex/react'
+import { useAuthActions } from '@convex-dev/auth/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import * as React from 'react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -13,6 +14,8 @@ import { TARGETS } from '../constants/targets'
 export default function ProfileDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { isAuthenticated } = useConvexAuth()
+  const { signIn } = useAuthActions()
   const triggerBuildViaProfile = useMutation(api.builds.triggerBuildViaProfile)
   const profile = useQuery(
     api.profiles.get,
@@ -80,6 +83,11 @@ export default function ProfileDetail() {
 
   const handleFlash = async () => {
     if (!selectedTarget || !id) return
+
+    if (!isAuthenticated) {
+      void signIn('google', { redirectTo: window.location.href })
+      return
+    }
 
     try {
       await triggerBuildViaProfile({

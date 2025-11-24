@@ -24,10 +24,6 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/profiles/:id" element={<ProfileDetail />} />
-          <Route
-            path="/profiles/:id/flash/:target"
-            element={<ProfileFlash />}
-          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Unauthenticated>

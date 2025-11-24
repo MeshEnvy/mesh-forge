@@ -30,7 +30,7 @@ export function ProfileStatisticPills({
 }
 
 interface ProfileCardContentProps {
-  profile: Doc
+  profile: Doc<'profiles'>
 }
 
 export function ProfileCardContent({ profile }: ProfileCardContentProps) {

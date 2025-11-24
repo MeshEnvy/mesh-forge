@@ -3,6 +3,7 @@ import { v } from 'convex/values'
 import { api } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { internalMutation, mutation, query } from './_generated/server'
+import { generateSignedDownloadUrl } from './lib/r2'
 import modulesData from './modules.json'
 
 type BuildUpdateData = {
@@ -61,6 +62,11 @@ export const triggerBuildViaProfile = mutation({
     target: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) {
+      throw new Error('Unauthorized')
+    }
+
     const profile = await ctx.db.get(args.profileId)
     if (!profile) {
       throw new Error('Profile not found')
@@ -313,5 +319,69 @@ export const updateBuildStatus = internalMutation({
     }
 
     await ctx.db.patch(args.buildId, updateData)
+  },
+})
+
+export const generateDownloadUrl = mutation({
+  args: {
+    buildId: v.id('builds'),
+    profileId: v.id('profiles'),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) throw new Error('Unauthorized')
+
+    // Verify profile belongs to user or is public
+    const profile = await ctx.db.get(args.profileId)
+    if (!profile) throw new Error('Profile not found')
+
+    // If profile is private, ensure user owns it
+    if (profile.isPublic === false && profile.userId !== userId) {
+      throw new Error('Unauthorized')
+    }
+
+    const build = await ctx.db.get(args.buildId)
+    if (!build) throw new Error('Build not found')
+
+    // Increment flash count
+    const nextCount = (profile.flashCount ?? 0) + 1
+    await ctx.db.patch(args.profileId, {
+      flashCount: nextCount,
+      updatedAt: Date.now(),
+    })
+
+    // Slugify profile name for filename
+    const slug = profile.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '')
+
+    // User indicated that artifactPath must be present for a valid download
+    if (!build.artifactPath) {
+      throw new Error('Build artifact path is missing')
+    }
+
+    let objectKey = build.artifactPath
+
+    // Remove leading slash if present
+    if (objectKey.startsWith('/')) {
+      objectKey = objectKey.substring(1)
+    }
+
+    // Determine extension from objectKey
+    const parts = objectKey.split('.')
+    const ext = parts.length > 1 ? parts.pop() : undefined
+
+    if (!ext) {
+      throw new Error('Could not determine file extension from artifact path')
+    }
+
+    const filename = `${slug}-${build.target}.${ext}`
+
+    return await generateSignedDownloadUrl(
+      objectKey,
+      filename,
+      'application/octet-stream'
+    )
   },
 })

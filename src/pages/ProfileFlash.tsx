@@ -29,7 +29,7 @@ export default function ProfileFlash() {
     api.profiles.get,
     id ? { id: id as Id<'profiles'> } : 'skip'
   )
-  const recordFlash = useMutation(api.profiles.recordFlash)
+  const generateDownloadUrl = useMutation(api.builds.generateDownloadUrl)
 
   if (data === undefined || profile === undefined) {
     return (
@@ -87,11 +87,13 @@ export default function ProfileFlash() {
     if (!id || !build.artifactUrl) return
 
     try {
-      await recordFlash({ profileId: id as Id<'profiles'> })
+      const url = await generateDownloadUrl({
+        buildId: build._id,
+        profileId: id as Id<'profiles'>,
+      })
+      window.location.href = url
     } catch (error) {
-      console.error('Failed to record flash', error)
-    } finally {
-      window.open(build.artifactUrl, '_blank', 'noopener,noreferrer')
+      console.error('Failed to generate download URL', error)
     }
   }
 
