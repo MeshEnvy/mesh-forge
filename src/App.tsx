@@ -1,10 +1,13 @@
 import { Authenticated, AuthLoading, Unauthenticated } from 'convex/react'
 import { Loader2 } from 'lucide-react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
+import Navbar from './components/Navbar'
 import BuildDetail from './pages/BuildDetail'
 import Dashboard from './pages/Dashboard'
 import LandingPage from './pages/LandingPage'
+import ProfileDetail from './pages/ProfileDetail'
+import ProfileFlash from './pages/ProfileFlash'
 
 function App() {
   return (
@@ -16,16 +19,23 @@ function App() {
       </AuthLoading>
 
       <Unauthenticated>
+        <Navbar />
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/profiles/:id" element={<ProfileDetail />} />
+          <Route path="/profiles/:id/flash" element={<ProfileFlash />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Unauthenticated>
 
       <Authenticated>
+        <Navbar />
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/builds/:buildId" element={<BuildDetail />} />
+          <Route path="/profiles/:id" element={<ProfileDetail />} />
+          <Route path="/profiles/:id/flash" element={<ProfileFlash />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Authenticated>

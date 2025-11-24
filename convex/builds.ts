@@ -84,8 +84,16 @@ export const triggerBuild = mutation({
 
     const flagsString = flags.join(' ')
 
+    // Get targets from profileTargets
+    const profileTargets = await ctx.db
+      .query('profileTargets')
+      .withIndex('by_profile', (q) => q.eq('profileId', args.profileId))
+      .collect()
+
+    const targets = profileTargets.map((pt) => pt.target)
+
     // Create build records for each target
-    for (const target of profile.targets) {
+    for (const target of targets) {
       // Compute build hash using the generated flags
       const buildHash = await computeBuildHash(
         profile.version,

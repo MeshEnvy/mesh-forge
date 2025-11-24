@@ -1,5 +1,4 @@
 import { useMutation } from 'convex/react'
-import * as React from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -7,15 +6,14 @@ import { Input } from '@/components/ui/input'
 import { api } from '../../convex/_generated/api'
 import type { Doc } from '../../convex/_generated/dataModel'
 import modulesData from '../../convex/modules.json'
-import { TARGETS } from '../constants/targets'
 import { VERSIONS } from '../constants/versions'
 import { ModuleCard } from './ModuleCard'
 
 interface ProfileFormValues {
   name: string
-  targets: string[]
   config: Record<string, boolean>
   version: string
+  isPublic: boolean
 }
 
 interface ProfileEditorProps {
@@ -32,69 +30,32 @@ export default function ProfileEditor({
   const createProfile = useMutation(api.profiles.create)
   const updateProfile = useMutation(api.profiles.update)
 
-  const { register, handleSubmit, setValue, watch } = useForm({
-    defaultValues: initialData || {
-      name: '',
-      targets: [],
-      config: {},
-      version: VERSIONS[0],
-    },
-  })
-
-  const targets = watch('targets')
-
-  // Group targets by category
-  const groupedTargets = React.useMemo(() => {
-    return Object.entries(TARGETS).reduce(
-      (acc, [id, meta]) => {
-        const category = meta.category || 'Other'
-        if (!acc[category]) acc[category] = []
-        acc[category].push({ id, ...meta })
-        return acc
+  const { register, handleSubmit, setValue, watch } =
+    useForm<ProfileFormValues>({
+      defaultValues: {
+        name: initialData?.name || '',
+        config: initialData?.config || {},
+        version: initialData?.version || VERSIONS[0],
+        isPublic: initialData?.isPublic ?? true,
       },
-      {} as Record<string, ((typeof TARGETS)[string] & { id: string })[]>
-    )
-  }, [])
-
-  const categories = React.useMemo(
-    () => Object.keys(groupedTargets).sort(),
-    [groupedTargets]
-  )
-
-  const [activeCategory, setActiveCategory] = React.useState<string>(
-    categories[0] || 'Heltec'
-  )
-
-  // Update active category when categories load if not set
-  React.useEffect(() => {
-    if (!activeCategory && categories.length > 0) {
-      setActiveCategory(categories[0])
-    }
-  }, [categories, activeCategory])
-
-  const toggleTarget = (target: string) => {
-    const current = targets || []
-    if (current.includes(target)) {
-      setValue(
-        'targets',
-        current.filter((t: string) => t !== target)
-      )
-    } else {
-      setValue('targets', [...current, target])
-    }
-  }
+    })
 
   const onSubmit = async (data: ProfileFormValues) => {
     if (initialData?._id) {
       await updateProfile({
         id: initialData._id,
         name: data.name,
-        targets: data.targets,
         config: data.config,
         version: data.version,
+        isPublic: data.isPublic,
       })
     } else {
-      await createProfile(data)
+      await createProfile({
+        name: data.name,
+        config: data.config,
+        version: data.version,
+        isPublic: data.isPublic,
+      })
     }
     onSave()
   }
@@ -135,64 +96,23 @@ export default function ProfileEditor({
       </div>
 
       <div>
-        <div className="block text-sm font-medium mb-2">Targets</div>
-        <div className="space-y-4">
-          {/* Category Pills */}
-          <div className="flex flex-wrap gap-2">
-            {categories.map((category) => {
-              const count = groupedTargets[category].filter((t) =>
-                targets?.includes(t.id)
-              ).length
-              const isActive = activeCategory === category
-
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setActiveCategory(category)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {category}
-                  {count > 0 && (
-                    <span className="ml-2 bg-white/20 px-1.5 py-0.5 rounded-full text-xs">
-                      {count}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Active Category Targets */}
-          <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800/50">
-            <div className="flex gap-4 flex-wrap">
-              {groupedTargets[activeCategory]?.map((item) => (
-                <div key={item.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={item.id}
-                    checked={targets?.includes(item.id)}
-                    onCheckedChange={() => toggleTarget(item.id)}
-                  />
-                  <label
-                    htmlFor={item.id}
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                  >
-                    {item.name}
-                    {item.architecture && (
-                      <span className="ml-2 text-xs text-slate-500">
-                        ({item.architecture})
-                      </span>
-                    )}
-                  </label>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="isPublic"
+            checked={watch('isPublic')}
+            onCheckedChange={(checked) => setValue('isPublic', !!checked)}
+            disabled
+          />
+          <label
+            htmlFor="isPublic"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+          >
+            Make profile public
+          </label>
         </div>
+        <p className="text-xs text-slate-400 mt-1 ml-6">
+          Public profiles are visible to everyone on the home page
+        </p>
       </div>
 
       <div className="space-y-6">

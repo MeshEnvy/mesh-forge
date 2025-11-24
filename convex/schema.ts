@@ -7,11 +7,13 @@ export default defineSchema({
   profiles: defineTable({
     userId: v.id('users'),
     name: v.string(),
-    targets: v.array(v.string()), // e.g. ["tbeam", "rak4631"]
     config: v.any(), // JSON object for flags
     version: v.string(),
     updatedAt: v.number(),
-  }).index('by_user', ['userId']),
+    isPublic: v.optional(v.boolean()),
+  })
+    .index('by_user', ['userId'])
+    .index('by_public', ['isPublic']),
   builds: defineTable({
     target: v.string(),
     githubRunId: v.number(),
@@ -21,6 +23,14 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     buildHash: v.string(),
   }).index('by_hash', ['buildHash']),
+
+  profileTargets: defineTable({
+    profileId: v.id('profiles'),
+    target: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_profile', ['profileId'])
+    .index('by_profile_target', ['profileId', 'target']),
 
   profileBuilds: defineTable({
     profileId: v.id('profiles'),

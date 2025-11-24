@@ -1,16 +1,15 @@
-import { useAuthActions } from '@convex-dev/auth/react'
 import { useMutation, useQuery } from 'convex/react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import BuildsPanel from '@/components/BuildsPanel'
 import ProfileEditor from '@/components/ProfileEditor'
+import ProfileTargets from '@/components/ProfileTargets'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 
 export default function Dashboard() {
-  const { signOut } = useAuthActions()
   const profiles = useQuery(api.profiles.list)
   const triggerBuild = useMutation(api.builds.triggerBuild)
   const removeProfile = useMutation(api.profiles.remove)
@@ -70,17 +69,12 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-950 text-white p-8">
       <header className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold">My Fleet</h1>
-        <div className="flex gap-4">
-          <Button
-            onClick={handleCreate}
-            className="bg-cyan-600 hover:bg-cyan-700"
-          >
-            <Plus className="w-4 h-4 mr-2" /> New Profile
-          </Button>
-          <Button variant="outline" onClick={() => signOut()}>
-            Sign Out
-          </Button>
-        </div>
+        <Button
+          onClick={handleCreate}
+          className="bg-cyan-600 hover:bg-cyan-700"
+        >
+          <Plus className="w-4 h-4 mr-2" /> New Profile
+        </Button>
       </header>
 
       <main>
@@ -103,7 +97,7 @@ export default function Dashboard() {
                   <span className="text-slate-200">{profile.version}</span>
                 </p>
                 <p className="text-slate-400 text-sm mb-4">
-                  Targets: {profile.targets.join(', ')}
+                  <ProfileTargets profileId={profile._id} />
                 </p>
                 <div className="flex gap-2">
                   <Button
