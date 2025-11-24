@@ -89,7 +89,7 @@ export const triggerBuildViaProfile = mutation({
     // Check if build already exists with this hash
     let existingBuild = await ctx.db
       .query('builds')
-      .withIndex('by_hash', (q) => q.eq('buildHash', buildHash))
+      .filter((q) => q.eq('buildHash', buildHash))
       .first()
 
     let buildId: Id<'builds'>
@@ -112,7 +112,7 @@ export const triggerBuildViaProfile = mutation({
       // Handle race condition
       existingBuild = await ctx.db
         .query('builds')
-        .withIndex('by_hash', (q) => q.eq('buildHash', buildHash))
+        .filter((q) => q.eq('buildHash', buildHash))
         .first()
 
       if (existingBuild && existingBuild._id !== buildId) {
@@ -124,9 +124,10 @@ export const triggerBuildViaProfile = mutation({
 
     // Create or update profileBuild record
     // Check if a profileBuild already exists for this profile+target combination
+    const profileId = args.profileId as string
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_profile', (q) => q.eq('profileId', args.profileId))
+      .filter((q) => q.eq('profileId', profileId))
       .collect()
 
     // Find existing profileBuild with matching target by checking the build
@@ -169,9 +170,10 @@ export const listByProfile = query({
   args: { profileId: v.id('profiles') },
   handler: async (ctx, args) => {
     // Query profileBuilds for this profile
+    const listProfileId = args.profileId as string
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_profile', (q) => q.eq('profileId', args.profileId))
+      .filter((q) => q.eq('profileId', listProfileId))
       .collect()
 
     // Get builds for each profileBuild
@@ -206,9 +208,10 @@ export const get = query({
 
     // Check if user has access via profileBuilds
     // Get all profileBuilds for this build
+    const buildId = args.buildId as string
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_build', (q) => q.eq('buildId', args.buildId))
+      .filter((q) => q.eq('buildId', buildId))
       .collect()
 
     // Check if any of these profileBuilds link to a profile owned by the user
@@ -251,9 +254,10 @@ export const deleteBuild = mutation({
     }
 
     // Find profileBuild linking this profile to this build
+    const buildId = args.buildId as string
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_build', (q) => q.eq('buildId', args.buildId))
+      .filter((q) => q.eq('buildId', buildId))
       .collect()
 
     const profileBuild = profileBuilds.find(

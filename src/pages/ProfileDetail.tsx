@@ -3,6 +3,7 @@ import * as React from 'react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { ProfileStatisticPills } from '@/components/ProfileCard'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -93,14 +94,23 @@ export default function ProfileDetail() {
     }
   }
 
+  const totalFlashes = profile.flashCount ?? 0
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-2">{profile.name}</h1>
-        <p className="text-slate-400 mb-8">
-          Version: {profile.version} • Flashed {flashCount} time
-          {flashCount !== 1 ? 's' : ''}
-        </p>
+        <div className="space-y-4 mb-8">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">{profile.name}</h1>
+            <p className="text-slate-400">
+              Flashed {flashCount} time{flashCount !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <ProfileStatisticPills
+            version={profile.version}
+            flashCount={totalFlashes}
+          />
+        </div>
 
         <div className="space-y-8">
           {/* Enabled Modules */}

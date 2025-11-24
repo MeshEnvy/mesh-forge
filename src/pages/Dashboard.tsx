@@ -3,6 +3,10 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import {
+  ProfileCardContent,
+  profileCardClasses,
+} from '@/components/ProfileCard'
 import ProfileEditor from '@/components/ProfileEditor'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
@@ -67,19 +71,9 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {profiles?.map((profile) => (
-              <div
-                key={profile._id}
-                className="border border-slate-800 rounded-lg p-6 bg-slate-900/50"
-              >
-                <h3 className="text-xl font-semibold mb-2">{profile.name}</h3>
-                <p className="text-slate-400 text-sm mb-1">
-                  Version:{' '}
-                  <span className="text-slate-200">{profile.version}</span>
-                </p>
-                <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                  {profile.description}
-                </p>
-                <div className="flex gap-2">
+              <div key={profile._id} className={profileCardClasses}>
+                <ProfileCardContent profile={profile} />
+                <div className="flex gap-2 pt-2">
                   <Button size="sm" asChild>
                     <Link to={`/profiles/${profile._id}`}>Use</Link>
                   </Button>

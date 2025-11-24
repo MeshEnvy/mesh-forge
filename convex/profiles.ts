@@ -11,7 +11,7 @@ export const list = query({
 
     return await ctx.db
       .query('profiles')
-      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .filter((q) => q.eq(q.field('userId'), userId))
       .collect()
   },
 })
@@ -19,10 +19,11 @@ export const list = query({
 export const listPublic = query({
   args: {},
   handler: async (ctx) => {
-    // Get all profiles and filter for public ones (isPublic === true or undefined)
-    // Note: Index query with optional field may not work as expected, so we filter manually
-    const allProfiles = await ctx.db.query('profiles').collect()
-    return allProfiles.filter((p) => p.isPublic !== false)
+    const allProfiles = await ctx.db
+      .query('profiles')
+      .filter((q) => q.eq(q.field('isPublic'), true))
+      .collect()
+    return allProfiles.sort((a, b) => (b.flashCount ?? 0) - (a.flashCount ?? 0))
   },
 })
 
@@ -46,9 +47,10 @@ export const get = query({
 export const getTargets = query({
   args: { profileId: v.id('profiles') },
   handler: async (ctx, args) => {
+    const profileId = args.profileId as string
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_profile', (q) => q.eq('profileId', args.profileId))
+      .filter((q) => q.eq('profileId', profileId))
       .collect()
     // Get unique targets from builds
     const builds = await Promise.all(
@@ -72,7 +74,7 @@ export const getProfileTarget = query({
     // Get all profileBuilds for this profile
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_profile', (q) => q.eq('profileId', args.profileId))
+      .filter((q) => q.eq(q.field('profileId'), args.profileId))
       .collect()
 
     // Find the profileBuild with matching target by checking the build
@@ -98,7 +100,7 @@ export const getFlashCount = query({
   handler: async (ctx, args) => {
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_profile', (q) => q.eq('profileId', args.profileId))
+      .filter((q) => q.eq(q.field('profileId'), args.profileId))
       .collect()
 
     let successCount = 0
@@ -112,6 +114,27 @@ export const getFlashCount = query({
   },
 })
 
+export const recordFlash = mutation({
+  args: {
+    profileId: v.id('profiles'),
+  },
+  handler: async (ctx, args) => {
+    const profile = await ctx.db.get(args.profileId)
+    if (!profile) {
+      throw new Error('Profile not found')
+    }
+
+    const nextCount = (profile.flashCount ?? 0) + 1
+
+    await ctx.db.patch(args.profileId, {
+      flashCount: nextCount,
+      updatedAt: Date.now(),
+    })
+
+    return nextCount
+  },
+})
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -119,7 +142,7 @@ export const create = mutation({
     targets: v.optional(v.array(v.string())),
     config: v.any(),
     version: v.string(),
-    isPublic: v.optional(v.boolean()),
+    isPublic: v.boolean(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx)
@@ -131,6 +154,7 @@ export const create = mutation({
       description: args.description,
       config: args.config,
       version: args.version,
+      flashCount: 0,
       updatedAt: Date.now(),
       isPublic: args.isPublic ?? true,
     })
@@ -150,7 +174,7 @@ export const update = mutation({
     targets: v.optional(v.array(v.string())),
     config: v.any(),
     version: v.optional(v.string()),
-    isPublic: v.optional(v.boolean()),
+    isPublic: v.boolean(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx)
@@ -168,6 +192,7 @@ export const update = mutation({
       config: args.config,
       version: args.version,
       isPublic: args.isPublic,
+      flashCount: profile.flashCount ?? 0,
       updatedAt: Date.now(),
     })
 
@@ -190,7 +215,7 @@ export const remove = mutation({
     // Delete associated profileBuilds
     const profileBuilds = await ctx.db
       .query('profileBuilds')
-      .withIndex('by_profile', (q) => q.eq('profileId', args.id))
+      .filter((q) => q.eq(q.field('profileId'), args.id))
       .collect()
 
     for (const profileBuild of profileBuilds) {

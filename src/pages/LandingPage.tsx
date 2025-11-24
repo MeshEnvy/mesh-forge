@@ -1,5 +1,9 @@
 import { useQuery } from 'convex/react'
 import { useNavigate } from 'react-router-dom'
+import {
+  ProfileCardContent,
+  profileCardClasses,
+} from '@/components/ProfileCard'
 import { api } from '../../convex/_generated/api'
 
 export default function LandingPage() {
@@ -44,16 +48,9 @@ export default function LandingPage() {
                       navigate(`/profiles/${profile._id}`)
                     }
                   }}
-                  className="border border-slate-800 rounded-lg p-6 bg-slate-900/50 hover:bg-slate-900 cursor-pointer transition-colors text-left"
+                  className={`${profileCardClasses} hover:bg-slate-900 cursor-pointer transition-colors text-left`}
                 >
-                  <h3 className="text-xl font-semibold mb-2">{profile.name}</h3>
-                  <p className="text-slate-400 text-sm">
-                    Version:{' '}
-                    <span className="text-slate-200">{profile.version}</span>
-                  </p>
-                  <p className="text-slate-300 text-sm mt-3 leading-relaxed">
-                    {profile.description}
-                  </p>
+                  <ProfileCardContent profile={profile} />
                 </button>
               ))}
             </div>

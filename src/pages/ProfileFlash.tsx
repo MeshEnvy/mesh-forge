@@ -1,4 +1,4 @@
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import {
   ArrowLeft,
   CheckCircle,
@@ -7,6 +7,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
+import { ProfileStatisticPills } from '@/components/ProfileCard'
 import { Button } from '@/components/ui/button'
 import { humanizeStatus } from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
@@ -28,6 +29,7 @@ export default function ProfileFlash() {
     api.profiles.get,
     id ? { id: id as Id<'profiles'> } : 'skip'
   )
+  const recordFlash = useMutation(api.profiles.recordFlash)
 
   if (data === undefined || profile === undefined) {
     return (
@@ -79,6 +81,19 @@ export default function ProfileFlash() {
   const includedModules = modulesData.modules.filter(
     (module) => profile.config?.[module.id] === false
   )
+  const totalFlashes = profile.flashCount ?? 0
+
+  const handleDownload = async () => {
+    if (!id || !build.artifactUrl) return
+
+    try {
+      await recordFlash({ profileId: id as Id<'profiles'> })
+    } catch (error) {
+      console.error('Failed to record flash', error)
+    } finally {
+      window.open(build.artifactUrl, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   const getStatusColor = (status: string) => {
     if (status === 'success') return 'text-green-400'
@@ -124,6 +139,10 @@ export default function ProfileFlash() {
           <p className="text-slate-200 leading-relaxed">
             {profile.description}
           </p>
+          <ProfileStatisticPills
+            version={profile.version}
+            flashCount={totalFlashes}
+          />
         </div>
 
         <div className="bg-slate-900/50 rounded-lg border border-slate-800 p-6">
@@ -176,15 +195,12 @@ export default function ProfileFlash() {
 
           {build.status === 'success' && build.artifactUrl && (
             <div>
-              <a
-                href={build.artifactUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Button
+                onClick={handleDownload}
+                className="bg-cyan-600 hover:bg-cyan-700 w-full"
               >
-                <Button className="bg-cyan-600 hover:bg-cyan-700 w-full">
-                  Download Firmware
-                </Button>
-              </a>
+                Download Firmware
+              </Button>
             </div>
           )}
         </div>
