@@ -31,7 +31,7 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             <Unauthenticated>
               <Button
-                onClick={() => signIn('google')}
+                onClick={() => signIn('google', { redirectTo: '/dashboard' })}
                 className="bg-white text-slate-900 hover:bg-slate-200"
               >
                 Sign in
