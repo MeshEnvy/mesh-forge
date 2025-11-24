@@ -51,6 +51,9 @@ export default function LandingPage() {
                     Version:{' '}
                     <span className="text-slate-200">{profile.version}</span>
                   </p>
+                  <p className="text-slate-300 text-sm mt-3 leading-relaxed">
+                    {profile.description}
+                  </p>
                 </button>
               ))}
             </div>

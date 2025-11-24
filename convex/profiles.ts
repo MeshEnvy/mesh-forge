@@ -115,6 +115,7 @@ export const getFlashCount = query({
 export const create = mutation({
   args: {
     name: v.string(),
+    description: v.string(),
     targets: v.optional(v.array(v.string())),
     config: v.any(),
     version: v.string(),
@@ -127,6 +128,7 @@ export const create = mutation({
     const profileId = await ctx.db.insert('profiles', {
       userId,
       name: args.name,
+      description: args.description,
       config: args.config,
       version: args.version,
       updatedAt: Date.now(),
@@ -144,6 +146,7 @@ export const update = mutation({
   args: {
     id: v.id('profiles'),
     name: v.string(),
+    description: v.string(),
     targets: v.optional(v.array(v.string())),
     config: v.any(),
     version: v.optional(v.string()),
@@ -161,6 +164,7 @@ export const update = mutation({
     // Update profile
     await ctx.db.patch(args.id, {
       name: args.name,
+      description: args.description,
       config: args.config,
       version: args.version,
       isPublic: args.isPublic,

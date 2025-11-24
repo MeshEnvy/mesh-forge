@@ -7,6 +7,7 @@ export default defineSchema({
   profiles: defineTable({
     userId: v.id('users'),
     name: v.string(),
+    description: v.string(),
     config: v.any(), // JSON object for flags
     version: v.string(),
     updatedAt: v.number(),

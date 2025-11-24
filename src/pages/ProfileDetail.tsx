@@ -178,11 +178,6 @@ export default function ProfileDetail() {
                               }`}
                             >
                               {item.name}
-                              {item.architecture && (
-                                <span className="ml-2 text-xs opacity-75">
-                                  ({item.architecture})
-                                </span>
-                              )}
                             </button>
                           )
                         })}

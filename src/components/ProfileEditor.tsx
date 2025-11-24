@@ -11,6 +11,7 @@ import { ModuleCard } from './ModuleCard'
 
 interface ProfileFormValues {
   name: string
+  description: string
   config: Record<string, boolean>
   version: string
   isPublic: boolean
@@ -30,21 +31,28 @@ export default function ProfileEditor({
   const createProfile = useMutation(api.profiles.create)
   const updateProfile = useMutation(api.profiles.update)
 
-  const { register, handleSubmit, setValue, watch } =
-    useForm<ProfileFormValues>({
-      defaultValues: {
-        name: initialData?.name || '',
-        config: initialData?.config || {},
-        version: initialData?.version || VERSIONS[0],
-        isPublic: initialData?.isPublic ?? true,
-      },
-    })
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<ProfileFormValues>({
+    defaultValues: {
+      name: initialData?.name || '',
+      description: initialData?.description || '',
+      config: initialData?.config || {},
+      version: initialData?.version || VERSIONS[0],
+      isPublic: initialData?.isPublic ?? true,
+    },
+  })
 
   const onSubmit = async (data: ProfileFormValues) => {
     if (initialData?._id) {
       await updateProfile({
         id: initialData._id,
         name: data.name,
+        description: data.description,
         config: data.config,
         version: data.version,
         isPublic: data.isPublic,
@@ -52,6 +60,7 @@ export default function ProfileEditor({
     } else {
       await createProfile({
         name: data.name,
+        description: data.description,
         config: data.config,
         version: data.version,
         isPublic: data.isPublic,
@@ -72,10 +81,13 @@ export default function ProfileEditor({
           </label>
           <Input
             id="name"
-            {...register('name')}
+            {...register('name', { required: 'Profile name is required' })}
             className="bg-slate-950 border-slate-800"
             placeholder="e.g. Solar Repeater"
           />
+          {errors.name && (
+            <p className="mt-1 text-sm text-red-400">{errors.name.message}</p>
+          )}
         </div>
         <div>
           <label htmlFor="version" className="block text-sm font-medium mb-2">
@@ -93,6 +105,25 @@ export default function ProfileEditor({
             ))}
           </select>
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="description" className="block text-sm font-medium mb-2">
+          Description
+        </label>
+        <textarea
+          id="description"
+          {...register('description', {
+            required: 'Profile description is required',
+          })}
+          className="w-full min-h-[120px] rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-950"
+          placeholder="Describe what this profile is best suited for"
+        />
+        {errors.description && (
+          <p className="mt-1 text-sm text-red-400">
+            {errors.description.message}
+          </p>
+        )}
       </div>
 
       <div>

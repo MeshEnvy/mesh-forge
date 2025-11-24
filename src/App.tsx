@@ -7,6 +7,7 @@ import BuildDetail from './pages/BuildDetail'
 import Dashboard from './pages/Dashboard'
 import LandingPage from './pages/LandingPage'
 import ProfileDetail from './pages/ProfileDetail'
+import ProfileEditorPage from './pages/ProfileEditorPage'
 import ProfileFlash from './pages/ProfileFlash'
 
 function App() {
@@ -37,6 +38,10 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/builds/:buildId" element={<BuildDetail />} />
+          <Route
+            path="/dashboard/profiles/:id"
+            element={<ProfileEditorPage />}
+          />
           <Route path="/profiles/:id" element={<ProfileDetail />} />
           <Route
             path="/profiles/:id/flash/:target"

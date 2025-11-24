@@ -1,30 +1,25 @@
 import { useMutation, useQuery } from 'convex/react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import BuildsPanel from '@/components/BuildsPanel'
 import ProfileEditor from '@/components/ProfileEditor'
-import ProfileTargets from '@/components/ProfileTargets'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const profiles = useQuery(api.profiles.list)
   const removeProfile = useMutation(api.profiles.remove)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editingProfile, setEditingProfile] = useState<
-    Doc<'profiles'> | undefined
-  >(undefined)
+  const [isCreating, setIsCreating] = useState(false)
 
   const handleEdit = (profile: Doc<'profiles'>) => {
-    setEditingProfile(profile)
-    setIsEditing(true)
+    navigate(`/dashboard/profiles/${profile._id}`)
   }
 
   const handleCreate = () => {
-    setEditingProfile(undefined)
-    setIsEditing(true)
+    setIsCreating(true)
   }
 
   const handleDelete = async (
@@ -64,11 +59,10 @@ export default function Dashboard() {
       </header>
 
       <main>
-        {isEditing ? (
+        {isCreating ? (
           <ProfileEditor
-            initialData={editingProfile}
-            onSave={() => setIsEditing(false)}
-            onCancel={() => setIsEditing(false)}
+            onSave={() => setIsCreating(false)}
+            onCancel={() => setIsCreating(false)}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -82,10 +76,13 @@ export default function Dashboard() {
                   Version:{' '}
                   <span className="text-slate-200">{profile.version}</span>
                 </p>
-                <p className="text-slate-400 text-sm mb-4">
-                  <ProfileTargets profileId={profile._id} />
+                <p className="text-slate-300 text-sm mb-4 leading-relaxed">
+                  {profile.description}
                 </p>
                 <div className="flex gap-2">
+                  <Button size="sm" asChild>
+                    <Link to={`/profiles/${profile._id}`}>Use</Link>
+                  </Button>
                   <Button
                     size="sm"
                     variant="secondary"
@@ -100,10 +97,6 @@ export default function Dashboard() {
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-slate-800">
-                  <BuildsPanel profileId={profile._id} />
                 </div>
               </div>
             ))}
