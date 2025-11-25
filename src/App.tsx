@@ -3,7 +3,6 @@ import { Loader2 } from 'lucide-react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import Navbar from './components/Navbar'
-import BuildDetail from './pages/BuildDetail'
 import Dashboard from './pages/Dashboard'
 import LandingPage from './pages/LandingPage'
 import ProfileDetail from './pages/ProfileDetail'
@@ -33,7 +32,6 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/builds/:buildId" element={<BuildDetail />} />
           <Route
             path="/dashboard/profiles/:id"
             element={<ProfileEditorPage />}
