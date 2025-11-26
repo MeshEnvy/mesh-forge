@@ -91,7 +91,7 @@ export default function LandingPage() {
               className="border-cyan-500/50 text-white hover:bg-slate-900/60"
             >
               <BrowseIcon className="mr-2 h-5 w-5" />
-              Browse
+              Browse Builds
             </Button>
             <Authenticated>
               <Button
