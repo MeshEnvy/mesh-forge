@@ -44,12 +44,35 @@ export default function LandingPage() {
             directly from your browser.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button
+              onClick={() => navigate('/builds/new')}
+              size="lg"
+              variant="outline"
+              className="border-cyan-500/50 text-white hover:bg-slate-900/60"
+            >
+              <QuickBuildIcon className="mr-2 h-5 w-5" />
+              Quick Build
+            </Button>
             <Authenticated>
               <Button
                 onClick={() => navigate('/dashboard')}
                 size="lg"
                 className="bg-white text-slate-900 hover:bg-slate-200"
               >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="w-8 h-8"
+                  aria-label="Dashboard icon"
+                >
+                  <title>Dashboard icon</title>
+                  <path
+                    fill="currentColor"
+                    fillRule="evenodd"
+                    d="M14.748 0a1.75 1.75 0 0 0-1.75 1.75v4.5c0 .966.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-4.5A1.75 1.75 0 0 0 22.248 0zm0 10a1.75 1.75 0 0 0-1.75 1.75v10.5c0 .967.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-10.5a1.75 1.75 0 0 0-1.75-1.75zM.002 1.75C.002.784.785 0 1.752 0h7.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 9.252 14h-7.5a1.75 1.75 0 0 1-1.75-1.75zM1.752 16a1.75 1.75 0 0 0-1.75 1.75v4.5c0 .966.783 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-4.5A1.75 1.75 0 0 0 9.252 16z"
+                    clipRule="evenodd"
+                  />
+                </svg>
                 Go to Dashboard
               </Button>
             </Authenticated>
@@ -64,15 +87,6 @@ export default function LandingPage() {
                 Sign in
               </Button>
             </Unauthenticated>
-            <Button
-              onClick={() => navigate('/builds/new')}
-              size="lg"
-              variant="outline"
-              className="border-cyan-500/50 text-white hover:bg-slate-900/60"
-            >
-              <QuickBuildIcon className="mr-2 h-5 w-5" />
-              Quick Build
-            </Button>
           </div>
         </div>
 
