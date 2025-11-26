@@ -166,27 +166,6 @@ export default function BuildNew() {
         </div>
 
         <div className="space-y-6 bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
-          <div>
-            <label
-              htmlFor="build-version"
-              className="block text-sm font-medium mb-2"
-            >
-              Firmware version
-            </label>
-            <select
-              id="build-version"
-              value={selectedVersion}
-              onChange={(event) => setSelectedVersion(event.target.value)}
-              className="w-full h-10 px-3 rounded-md border border-slate-800 bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-950"
-            >
-              {VERSIONS.map((version) => (
-                <option key={version} value={version}>
-                  {version}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               {TARGET_CATEGORIES.map((category) => {
@@ -231,6 +210,27 @@ export default function BuildNew() {
                 )}
               </div>
             </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="build-version"
+              className="block text-sm font-medium mb-2"
+            >
+              Firmware version
+            </label>
+            <select
+              id="build-version"
+              value={selectedVersion}
+              onChange={(event) => setSelectedVersion(event.target.value)}
+              className="w-full h-10 px-3 rounded-md border border-slate-800 bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-950"
+            >
+              {VERSIONS.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-6">
