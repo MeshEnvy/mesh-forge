@@ -1,21 +1,44 @@
 import { getAuthUserId } from '@convex-dev/auth/server'
 import { v } from 'convex/values'
-import { api } from './_generated/api'
+import { pick } from 'convex-helpers'
+import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { internalMutation, mutation, query } from './_generated/server'
 import { generateSignedDownloadUrl } from './lib/r2'
-import modulesData from './modules.json'
+import { type BuildFields, buildFields, type ProfileFields } from './schema'
 
 type BuildUpdateData = {
   status: string
   completedAt?: number
 }
 
+export const get = query({
+  args: { id: v.id('builds') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id)
+  },
+})
+
+/**
+ * Computes flags string from profile config.
+ * Only excludes modules explicitly marked as excluded (config[id] === true).
+ */
+export function computeFlagsFromProfile(
+  config: ProfileFields['config']
+): string {
+  // Sort modules to ensure consistent order
+  return Object.keys(config.modulesExcluded)
+    .sort()
+    .filter((module) => config.modulesExcluded[module])
+    .map((moduleExcludedName: string) => `-D${moduleExcludedName}=1`)
+    .join(' ')
+}
+
 /**
  * Computes a stable SHA-256 hash from version, target, and flags.
  * This hash uniquely identifies a build configuration based on what is actually executed.
  */
-async function computeBuildHash(
+export async function computeBuildHash(
   version: string,
   target: string,
   flags: string
@@ -38,14 +61,26 @@ async function computeBuildHash(
 }
 
 /**
+ * Computes buildHash for a profile and target.
+ * This is the single source of truth for build hash computation.
+ */
+export async function computeBuildHashForProfile(
+  profile: ProfileFields,
+  target: string
+): Promise<{ hash: string; flags: string }> {
+  const flags = computeFlagsFromProfile(profile.config)
+  const hash = await computeBuildHash(profile.version, target, flags)
+  return { hash, flags }
+}
+
+/**
  * Constructs the R2 artifact URL from a build.
  * Uses artifactPath if available, otherwise falls back to buildHash.uf2
  * Or custom domain if R2_PUBLIC_URL is set.
  */
-export function getR2ArtifactUrl(build: {
-  buildHash: string
-  artifactPath?: string
-}): string {
+export function getR2ArtifactUrl(
+  build: Pick<BuildFields, 'buildHash' | 'artifactPath'>
+): string {
   const r2PublicUrl = process.env.R2_PUBLIC_URL
   if (!r2PublicUrl) {
     throw new Error('R2_PUBLIC_URL is not set')
@@ -56,12 +91,62 @@ export function getR2ArtifactUrl(build: {
   return `${r2PublicUrl}${normalizedPath}`
 }
 
-export const triggerBuildViaProfile = mutation({
+// Internal mutation to upsert a build by buildHash
+// This is the single source of truth for build creation
+export const upsertBuild = internalMutation({
+  args: {
+    ...pick(buildFields, ['buildHash', 'target', 'version', 'profileString']),
+    status: v.optional(v.string()),
+    flags: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    // Check if build already exists with this hash
+    const existingBuild = await ctx.db
+      .query('builds')
+      .filter((q) => q.eq(q.field('buildHash'), args.buildHash))
+      .unique()
+
+    const { status, buildHash, target, version, profileString, flags } = args
+
+    if (existingBuild) {
+      await ctx.db.patch(existingBuild._id, {
+        status: status ?? existingBuild.status,
+        updatedAt: Date.now(),
+      })
+      return existingBuild._id
+    }
+
+    // Create new build
+    const buildId = await ctx.db.insert('builds', {
+      target,
+      status: 'queued',
+      startedAt: Date.now(),
+      buildHash,
+      updatedAt: Date.now(),
+      version,
+      profileString,
+    })
+
+    // Dispatch GitHub workflow if needed
+    await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
+      buildId,
+      target,
+      flags,
+      version,
+      buildHash,
+    })
+
+    return buildId
+  },
+})
+
+export const ensureBuildForProfileTarget = mutation({
   args: {
     profileId: v.id('profiles'),
     target: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Id<'builds'>> => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
       throw new Error('Unauthorized')
@@ -72,167 +157,23 @@ export const triggerBuildViaProfile = mutation({
       throw new Error('Profile not found')
     }
 
-    // Convert config object to flags string
-    const flags: string[] = []
+    // Compute build hash (single source of truth)
+    const { hash: buildHash, flags: flagsString } =
+      await computeBuildHashForProfile(profile, args.target)
 
-    // Handle Modules (Inverted Logic: Default Excluded)
-    for (const module of modulesData.modules) {
-      // If config[id] is NOT false (explicitly included), we exclude it.
-      if (profile.config[module.id] !== false) {
-        flags.push(`-D${module.id}=1`)
-      }
-    }
-
-    const flagsString = flags.join(' ')
-
-    // Compute build hash
-    const buildHash = await computeBuildHash(
-      profile.version,
-      args.target,
-      flagsString
-    )
-
-    // Check if build already exists with this hash
-    let existingBuild = await ctx.db
-      .query('builds')
-      .filter((q) => q.eq('buildHash', buildHash))
-      .first()
-
-    let buildId: Id<'builds'>
-    let shouldDispatch = false
-
-    if (existingBuild) {
-      // Build already exists, use it
-      buildId = existingBuild._id
-    } else {
-      // Create new build and dispatch workflow
-      buildId = await ctx.db.insert('builds', {
-        target: args.target,
-        githubRunId: 0,
-        status: 'queued',
-        startedAt: Date.now(),
-        buildHash: buildHash,
-      })
-      shouldDispatch = true
-
-      // Handle race condition
-      existingBuild = await ctx.db
-        .query('builds')
-        .filter((q) => q.eq('buildHash', buildHash))
-        .first()
-
-      if (existingBuild && existingBuild._id !== buildId) {
-        await ctx.db.delete(buildId)
-        buildId = existingBuild._id
-        shouldDispatch = false
-      }
-    }
-
-    // Create or update profileBuild record
-    // Check if a profileBuild already exists for this profile+target combination
-    const profileId = args.profileId as string
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq('profileId', profileId))
-      .collect()
-
-    // Find existing profileBuild with matching target by checking the build
-    let foundExisting = null
-    for (const pb of profileBuilds) {
-      const build = await ctx.db.get(pb.buildId)
-      if (build?.target === args.target) {
-        foundExisting = pb
-        break
-      }
-    }
-
-    if (foundExisting) {
-      await ctx.db.patch(foundExisting._id, {
-        buildId: buildId,
-      })
-    } else {
-      await ctx.db.insert('profileBuilds', {
-        profileId: args.profileId,
-        buildId: buildId,
-      })
-    }
-
-    // Dispatch GitHub workflow if needed
-    if (shouldDispatch) {
-      await ctx.scheduler.runAfter(0, api.actions.dispatchGithubBuild, {
-        buildId: buildId,
+    // Upsert the build (single source of truth)
+    const buildId: Id<'builds'> = await ctx.runMutation(
+      internal.builds.upsertBuild,
+      {
+        buildHash,
         target: args.target,
         flags: flagsString,
         version: profile.version,
-        buildHash: buildHash,
-      })
-    }
-
-    return buildId
-  },
-})
-
-export const listByProfile = query({
-  args: { profileId: v.id('profiles') },
-  handler: async (ctx, args) => {
-    // Query profileBuilds for this profile
-    const listProfileId = args.profileId as string
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq('profileId', listProfileId))
-      .collect()
-
-    // Get builds for each profileBuild
-    const builds = await Promise.all(
-      profileBuilds.map(async (pb) => {
-        const build = await ctx.db.get(pb.buildId)
-        if (!build) return null
-        // Return build with computed artifactUrl
-        return {
-          ...build,
-          artifactUrl: getR2ArtifactUrl(build),
-        }
-      })
+        profileString: JSON.stringify(profile),
+      }
     )
 
-    // Filter out nulls and sort by startedAt descending
-    return builds
-      .filter((b): b is NonNullable<typeof b> => b !== null)
-      .sort((a, b) => b.startedAt - a.startedAt)
-      .slice(0, 10)
-  },
-})
-
-export const get = query({
-  args: { buildId: v.id('builds') },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) return null
-
-    const build = await ctx.db.get(args.buildId)
-    if (!build) return null
-
-    // Check if user has access via profileBuilds
-    // Get all profileBuilds for this build
-    const buildId = args.buildId as string
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq('buildId', buildId))
-      .collect()
-
-    // Check if any of these profileBuilds link to a profile owned by the user
-    for (const pb of profileBuilds) {
-      const profile = await ctx.db.get(pb.profileId)
-      if (profile && profile.userId === userId) {
-        // Return build with computed artifactUrl
-        return {
-          ...build,
-          artifactUrl: getR2ArtifactUrl(build),
-        }
-      }
-    }
-
-    return null
+    return buildId
   },
 })
 
@@ -241,41 +182,6 @@ export const getInternal = internalMutation({
   args: { buildId: v.id('builds') },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.buildId)
-  },
-})
-
-export const deleteBuild = mutation({
-  args: {
-    buildId: v.id('builds'),
-    profileId: v.id('profiles'),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) throw new Error('Unauthorized')
-
-    // Verify profile belongs to user
-    const profile = await ctx.db.get(args.profileId)
-    if (!profile || profile.userId !== userId) {
-      throw new Error('Unauthorized')
-    }
-
-    // Find profileBuild linking this profile to this build
-    const buildId = args.buildId as string
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq('buildId', buildId))
-      .collect()
-
-    const profileBuild = profileBuilds.find(
-      (pb) => pb.profileId === args.profileId
-    )
-
-    if (!profileBuild) {
-      throw new Error('ProfileBuild not found')
-    }
-
-    // Delete only the profileBuild record (not the underlying build)
-    await ctx.db.delete(profileBuild._id)
   },
 })
 
@@ -296,10 +202,13 @@ export const logBuildError = internalMutation({
 // Internal mutation to update build status
 export const updateBuildStatus = internalMutation({
   args: {
+    ...pick(buildFields, [
+      'status',
+      'completedAt',
+      'artifactPath',
+      'githubRunId',
+    ]),
     buildId: v.id('builds'),
-    status: v.string(), // Accepts any status string value
-    artifactPath: v.optional(v.string()),
-    githubRunId: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const build = await ctx.db.get(args.buildId)

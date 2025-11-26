@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from 'convex/react'
 import { ArrowLeft, CheckCircle, Loader2, XCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ProfileStatisticPills } from '@/components/ProfileCard'
 import { Button } from '@/components/ui/button'
@@ -15,17 +16,32 @@ export default function ProfileFlash() {
     target: string
   }>()
 
-  const data = useQuery(
-    api.profiles.getProfileTarget,
-    id && target ? { profileId: id as Id<'profiles'>, target } : 'skip'
+  const ensureBuildForProfileTarget = useMutation(
+    api.builds.ensureBuildForProfileTarget
   )
+
+  const [buildId, setBuildId] = useState<Id<'builds'> | null>(null)
+
+  const build = useQuery(
+    api.builds.get, // query you write that does ctx.db.get(id)
+    buildId ? { id: buildId } : 'skip'
+  )
+
   const profile = useQuery(
     api.profiles.get,
     id ? { id: id as Id<'profiles'> } : 'skip'
   )
   const generateDownloadUrl = useMutation(api.builds.generateDownloadUrl)
 
-  if (data === undefined || profile === undefined) {
+  useEffect(() => {
+    if (id && target) {
+      ensureBuildForProfileTarget({ profileId: id as Id<'profiles'>, target })
+        .then(setBuildId)
+        .catch(() => setBuildId(null))
+    }
+  }, [id, target, ensureBuildForProfileTarget])
+
+  if (build === undefined || profile === undefined) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-8 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
@@ -33,7 +49,7 @@ export default function ProfileFlash() {
     )
   }
 
-  if (data === null || !data.build) {
+  if (!build) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-8">
         <div className="max-w-4xl mx-auto">
@@ -69,16 +85,15 @@ export default function ProfileFlash() {
     )
   }
 
-  const build = data.build
   const targetMeta = target ? TARGETS[target] : undefined
   const targetLabel = targetMeta?.name ?? target ?? 'Unknown Target'
-  const includedModules = modulesData.modules.filter(
-    (module) => profile.config?.[module.id] === false
+  const excludedModules = modulesData.modules.filter(
+    (module) => profile.config.modulesExcluded[module.id] === true
   )
   const totalFlashes = profile.flashCount ?? 0
 
   const handleDownload = async () => {
-    if (!id || !build.artifactUrl) return
+    if (!id || !build.artifactPath) return
 
     try {
       const url = await generateDownloadUrl({
@@ -108,7 +123,7 @@ export default function ProfileFlash() {
   }
 
   const githubActionUrl =
-    build.githubRunId > 0
+    build.githubRunId && build.githubRunId > 0
       ? `https://github.com/MeshEnvy/configurable-web-flasher/actions/runs/${build.githubRunId}`
       : null
 
@@ -142,12 +157,15 @@ export default function ProfileFlash() {
         </div>
 
         <div className="bg-slate-900/50 rounded-lg border border-slate-800 p-6">
-          <h2 className="text-xl font-semibold mb-4">Included Modules</h2>
-          {includedModules.length === 0 ? (
-            <p className="text-slate-400 text-sm">No modules included.</p>
+          <h2 className="text-xl font-semibold mb-4">Excluded Modules</h2>
+          {excludedModules.length === 0 ? (
+            <p className="text-slate-400 text-sm">
+              No modules explicitly excluded. All modules supported by this
+              target are included.
+            </p>
           ) : (
             <div className="space-y-3">
-              {includedModules.map((module) => (
+              {excludedModules.map((module) => (
                 <div key={module.id}>
                   <p className="font-medium text-sm">{module.name}</p>
                   <p className="text-slate-400 text-sm">{module.description}</p>
@@ -193,12 +211,12 @@ export default function ProfileFlash() {
                   </a>
                 )}
                 <span>•</span>
-                <span>{new Date(build.startedAt).toLocaleString()}</span>
+                <span>{new Date(build.updatedAt).toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          {build.status === 'success' && build.artifactUrl && (
+          {build.status === 'success' && build.artifactPath && (
             <div>
               <Button
                 onClick={handleDownload}

@@ -4,21 +4,21 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { api } from '../../convex/_generated/api'
-import type { Doc } from '../../convex/_generated/dataModel'
 import modulesData from '../../convex/modules.json'
+import type { ProfileFields, ProfilesDoc } from '../../convex/schema'
 import { VERSIONS } from '../constants/versions'
-import { ModuleCard } from './ModuleCard'
+import { ModuleToggle } from './ModuleToggle'
 
-interface ProfileFormValues {
-  name: string
-  description: string
-  config: Record<string, boolean>
-  version: string
-  isPublic: boolean
+// Form values use flattened config for UI, but will be transformed to nested on submit
+type ProfileFormValues = Omit<
+  ProfileFields,
+  '_id' | '_creationTime' | 'userId' | 'flashCount' | 'updatedAt' | 'config'
+> & {
+  config: Record<string, boolean | undefined> // Flattened: moduleId -> boolean
 }
 
 interface ProfileEditorProps {
-  initialData?: Doc<'profiles'>
+  initialData?: ProfilesDoc
   onSave: () => void
   onCancel: () => void
 }
@@ -28,8 +28,28 @@ export default function ProfileEditor({
   onSave,
   onCancel,
 }: ProfileEditorProps) {
-  const createProfile = useMutation(api.profiles.create)
-  const updateProfile = useMutation(api.profiles.update)
+  const upsertProfile = useMutation(api.profiles.upsert)
+
+  // Flatten config for UI: transform config.modulesExcluded to flat object
+  const getFlattenedConfig = (
+    config: ProfileFields['config'] | undefined
+  ): Record<string, boolean> => {
+    if (!config || !config.modulesExcluded) return {}
+    return { ...config.modulesExcluded }
+  }
+
+  // Transform flat config back to nested structure for database
+  const getNestedConfig = (
+    flatConfig: Record<string, boolean | undefined>
+  ): ProfileFields['config'] => {
+    const modulesExcluded: Record<string, boolean> = {}
+    for (const [key, value] of Object.entries(flatConfig)) {
+      if (value === true) {
+        modulesExcluded[key] = true
+      }
+    }
+    return { modulesExcluded }
+  }
 
   const {
     register,
@@ -41,31 +61,23 @@ export default function ProfileEditor({
     defaultValues: {
       name: initialData?.name || '',
       description: initialData?.description || '',
-      config: initialData?.config || {},
+      config: getFlattenedConfig(initialData?.config),
       version: initialData?.version || VERSIONS[0],
       isPublic: initialData?.isPublic ?? true,
     },
   })
 
   const onSubmit = async (data: ProfileFormValues) => {
-    if (initialData?._id) {
-      await updateProfile({
-        id: initialData._id,
-        name: data.name,
-        description: data.description,
-        config: data.config,
-        version: data.version,
-        isPublic: data.isPublic,
-      })
-    } else {
-      await createProfile({
-        name: data.name,
-        description: data.description,
-        config: data.config,
-        version: data.version,
-        isPublic: data.isPublic,
-      })
-    }
+    // Transform flattened config back to nested structure
+    const nestedConfig = getNestedConfig(data.config)
+    await upsertProfile({
+      id: initialData?._id,
+      name: data.name,
+      description: data.description,
+      config: nestedConfig,
+      version: data.version,
+      isPublic: data.isPublic,
+    })
     onSave()
   }
 
@@ -151,28 +163,36 @@ export default function ProfileEditor({
           <div className="mb-4">
             <h3 className="text-lg font-medium">Modules</h3>
             <p className="text-sm text-slate-400">
-              Select the modules to include in your build.
+              Modules are included by default if supported by your target.
+              Toggle to exclude modules you don't need.
             </p>
           </div>
           <div className="flex flex-col gap-2">
             {modulesData.modules.map((module) => {
-              // Inverted logic:
-              // config[id] === false -> Explicitly Included
-              // config[id] === true or undefined -> Excluded
-              const configValue = watch(`config.${module.id}`)
-              const isIncluded = configValue === false
+              // Flattened config: config[id] === true -> Explicitly Excluded
+              // config[id] === undefined/false -> Default (included if target supports)
+              const currentConfig = watch('config') as Record<
+                string,
+                boolean | undefined
+              >
+              const configValue = currentConfig[module.id]
+              const isExcluded = configValue === true
 
               return (
-                <ModuleCard
+                <ModuleToggle
                   key={module.id}
+                  id={module.id}
                   name={module.name}
                   description={module.description}
-                  selected={isIncluded}
-                  onClick={() => {
-                    // Toggle:
-                    // If currently included (true), we want to exclude (set config to true)
-                    // If currently excluded (false), we want to include (set config to false)
-                    setValue(`config.${module.id}`, !!isIncluded)
+                  isExcluded={isExcluded}
+                  onToggle={(excluded) => {
+                    const newConfig = { ...currentConfig }
+                    if (excluded) {
+                      newConfig[module.id] = true
+                    } else {
+                      delete newConfig[module.id]
+                    }
+                    setValue('config', newConfig)
                   }}
                 />
               )

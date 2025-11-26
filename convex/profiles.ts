@@ -1,7 +1,13 @@
 import { getAuthUserId } from '@convex-dev/auth/server'
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
-import { getR2ArtifactUrl } from './builds'
+import { api, internal } from './_generated/api'
+import type { Doc, Id } from './_generated/dataModel'
+import { action, internalMutation, mutation, query } from './_generated/server'
+import {
+  computeBuildHashForProfile,
+  computeFlagsFromProfile,
+  getR2ArtifactUrl,
+} from './builds'
 
 export const list = query({
   args: {},
@@ -44,73 +50,11 @@ export const get = query({
   },
 })
 
-export const getTargets = query({
-  args: { profileId: v.id('profiles') },
+// Internal mutation to get a build by ID
+export const getBuildById = internalMutation({
+  args: { buildId: v.id('builds') },
   handler: async (ctx, args) => {
-    const profileId = args.profileId as string
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq('profileId', profileId))
-      .collect()
-    // Get unique targets from builds
-    const builds = await Promise.all(
-      profileBuilds.map((pb) => ctx.db.get(pb.buildId))
-    )
-    const targets = new Set(
-      builds
-        .filter((b): b is NonNullable<typeof b> => b !== null)
-        .map((b) => b.target)
-    )
-    return Array.from(targets)
-  },
-})
-
-export const getProfileTarget = query({
-  args: {
-    profileId: v.id('profiles'),
-    target: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Get all profileBuilds for this profile
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq(q.field('profileId'), args.profileId))
-      .collect()
-
-    // Find the profileBuild with matching target by checking the build
-    for (const profileBuild of profileBuilds) {
-      const build = await ctx.db.get(profileBuild.buildId)
-      if (build?.target === args.target) {
-        return {
-          profileBuild,
-          build: {
-            ...build,
-            artifactUrl: getR2ArtifactUrl(build),
-          },
-        }
-      }
-    }
-
-    return null
-  },
-})
-
-export const getFlashCount = query({
-  args: { profileId: v.id('profiles') },
-  handler: async (ctx, args) => {
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq(q.field('profileId'), args.profileId))
-      .collect()
-
-    let successCount = 0
-    for (const profileBuild of profileBuilds) {
-      const build = await ctx.db.get(profileBuild.buildId)
-      if (build && build.status === 'success') {
-        successCount++
-      }
-    }
-    return successCount
+    return await ctx.db.get(args.buildId)
   },
 })
 
@@ -135,11 +79,11 @@ export const recordFlash = mutation({
   },
 })
 
-export const create = mutation({
+export const upsert = mutation({
   args: {
+    id: v.optional(v.id('profiles')),
     name: v.string(),
     description: v.string(),
-    targets: v.optional(v.array(v.string())),
     config: v.any(),
     version: v.string(),
     isPublic: v.boolean(),
@@ -148,56 +92,39 @@ export const create = mutation({
     const userId = await getAuthUserId(ctx)
     if (!userId) throw new Error('Unauthorized')
 
-    const profileId = await ctx.db.insert('profiles', {
-      userId,
-      name: args.name,
-      description: args.description,
-      config: args.config,
-      version: args.version,
-      flashCount: 0,
-      updatedAt: Date.now(),
-      isPublic: args.isPublic ?? true,
-    })
+    if (args.id) {
+      // Update existing profile
+      const profile = await ctx.db.get(args.id)
+      if (!profile || profile.userId !== userId) {
+        throw new Error('Unauthorized')
+      }
 
-    // Note: targets are now tracked via profileBuilds when builds are triggered
-    // No need to create profileTargets entries
+      await ctx.db.patch(args.id, {
+        name: args.name,
+        description: args.description,
+        config: args.config,
+        version: args.version,
+        isPublic: args.isPublic,
+        flashCount: profile.flashCount ?? 0,
+        updatedAt: Date.now(),
+      })
 
-    return profileId
-  },
-})
+      return args.id
+    } else {
+      // Create new profile
+      const profileId = await ctx.db.insert('profiles', {
+        userId,
+        name: args.name,
+        description: args.description,
+        config: args.config,
+        version: args.version,
+        flashCount: 0,
+        updatedAt: Date.now(),
+        isPublic: args.isPublic ?? true,
+      })
 
-export const update = mutation({
-  args: {
-    id: v.id('profiles'),
-    name: v.string(),
-    description: v.string(),
-    targets: v.optional(v.array(v.string())),
-    config: v.any(),
-    version: v.optional(v.string()),
-    isPublic: v.boolean(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) throw new Error('Unauthorized')
-
-    const profile = await ctx.db.get(args.id)
-    if (!profile || profile.userId !== userId) {
-      throw new Error('Unauthorized')
+      return profileId
     }
-
-    // Update profile
-    await ctx.db.patch(args.id, {
-      name: args.name,
-      description: args.description,
-      config: args.config,
-      version: args.version,
-      isPublic: args.isPublic,
-      flashCount: profile.flashCount ?? 0,
-      updatedAt: Date.now(),
-    })
-
-    // Note: targets are now tracked via profileBuilds when builds are triggered
-    // No need to sync profileTargets
   },
 })
 
@@ -210,16 +137,6 @@ export const remove = mutation({
     const profile = await ctx.db.get(args.id)
     if (!profile || profile.userId !== userId) {
       throw new Error('Unauthorized')
-    }
-
-    // Delete associated profileBuilds
-    const profileBuilds = await ctx.db
-      .query('profileBuilds')
-      .filter((q) => q.eq(q.field('profileId'), args.id))
-      .collect()
-
-    for (const profileBuild of profileBuilds) {
-      await ctx.db.delete(profileBuild._id)
     }
 
     await ctx.db.delete(args.id)

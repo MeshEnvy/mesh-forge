@@ -1,5 +1,5 @@
 import { useAuthActions } from '@convex-dev/auth/react'
-import { useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react'
 import * as React from 'react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -16,14 +16,12 @@ export default function ProfileDetail() {
   const navigate = useNavigate()
   const { isAuthenticated } = useConvexAuth()
   const { signIn } = useAuthActions()
-  const triggerBuildViaProfile = useMutation(api.builds.triggerBuildViaProfile)
+  const ensureBuildForProfileTarget = useMutation(
+    api.builds.ensureBuildForProfileTarget
+  )
   const profile = useQuery(
     api.profiles.get,
     id ? { id: id as Id<'profiles'> } : 'skip'
-  )
-  const flashCount = useQuery(
-    api.profiles.getFlashCount,
-    id ? { profileId: id as Id<'profiles'> } : 'skip'
   )
   const [selectedTarget, setSelectedTarget] = useState<string>('')
 
@@ -79,7 +77,7 @@ export default function ProfileDetail() {
     return <div>Profile ID required</div>
   }
 
-  if (profile === undefined || flashCount === undefined) {
+  if (profile === undefined) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-8 flex items-center justify-center">
         <div>Loading...</div>
@@ -95,9 +93,9 @@ export default function ProfileDetail() {
     )
   }
 
-  // Get enabled modules (inverted logic: config[id] === false means included)
-  const enabledModules = modulesData.modules.filter(
-    (module) => profile.config[module.id] === false
+  // Get excluded modules (new logic: config[id] === true means excluded)
+  const excludedModules = modulesData.modules.filter(
+    (module) => profile.config.modulesExcluded[module.id] === true
   )
 
   const handleFlash = async () => {
@@ -109,7 +107,7 @@ export default function ProfileDetail() {
     }
 
     try {
-      await triggerBuildViaProfile({
+      await ensureBuildForProfileTarget({
         profileId: id as Id<'profiles'>,
         target: selectedTarget,
       })
@@ -130,7 +128,7 @@ export default function ProfileDetail() {
           <div>
             <h1 className="text-4xl font-bold mb-2">{profile.name}</h1>
             <p className="text-slate-400">
-              Flashed {flashCount} time{flashCount !== 1 ? 's' : ''}
+              Flashed {totalFlashes} time{totalFlashes !== 1 ? 's' : ''}
             </p>
           </div>
           <ProfileStatisticPills
@@ -140,15 +138,18 @@ export default function ProfileDetail() {
         </div>
 
         <div className="space-y-8">
-          {/* Enabled Modules */}
+          {/* Excluded Modules */}
           <div>
-            <h2 className="text-2xl font-semibold mb-4">Enabled Modules</h2>
+            <h2 className="text-2xl font-semibold mb-4">Excluded Modules</h2>
             <div className="bg-slate-900/50 rounded-lg border border-slate-800 p-6">
-              {enabledModules.length === 0 ? (
-                <p className="text-slate-400">No modules enabled</p>
+              {excludedModules.length === 0 ? (
+                <p className="text-slate-400">
+                  No modules explicitly excluded. All modules supported by your
+                  target will be included.
+                </p>
               ) : (
                 <div className="space-y-4">
-                  {enabledModules.map((module) => (
+                  {excludedModules.map((module) => (
                     <div
                       key={module.id}
                       className="border-b border-slate-800 pb-4 last:border-b-0 last:pb-0"

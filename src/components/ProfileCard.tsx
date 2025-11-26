@@ -1,4 +1,5 @@
 import type { Doc } from '../../convex/_generated/dataModel'
+import type { ProfileFields } from '../../convex/schema'
 
 export const profileCardClasses =
   'border border-slate-800 rounded-lg p-6 bg-slate-900/50 flex flex-col gap-4'
@@ -30,7 +31,7 @@ export function ProfileStatisticPills({
 }
 
 interface ProfileCardContentProps {
-  profile: Doc<'profiles'>
+  profile: Doc<'profiles'> & ProfileFields
 }
 
 export function ProfileCardContent({ profile }: ProfileCardContentProps) {
