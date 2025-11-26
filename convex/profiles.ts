@@ -79,7 +79,6 @@ export const upsert = mutation({
     name: v.string(),
     description: v.string(),
     config: v.object(buildConfigFields),
-    version: v.string(),
     isPublic: v.boolean(),
   },
   handler: async (ctx, args) => {
