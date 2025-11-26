@@ -38,6 +38,10 @@
         "noUnusedVariables": {
           "level": "warn",
           "fix": "safe"
+        },
+        "noUnusedFunctionParameters": {
+          "level": "warn",
+          "fix": "safe"
         }
       }
     }
