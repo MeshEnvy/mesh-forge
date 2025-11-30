@@ -380,6 +380,7 @@ export default function BuildNew() {
                         featured={plugin.featured ?? false}
                         flashCount={pluginFlashCounts[slug] ?? 0}
                         homepage={plugin.homepage}
+                        version={plugin.version}
                       />
                     ))}
                 </div>

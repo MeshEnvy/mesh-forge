@@ -10,6 +10,7 @@ interface PluginToggleProps {
   featured?: boolean
   flashCount?: number
   homepage?: string
+  version?: string
 }
 
 export function PluginToggle({
@@ -20,11 +21,13 @@ export function PluginToggle({
   featured = false,
   flashCount = 0,
   homepage,
+  version,
 }: PluginToggleProps) {
   return (
     <div className="relative flex items-start gap-4 p-4 rounded-lg border-2 border-slate-700 bg-slate-900/50 hover:border-slate-600 transition-colors">
       {/* Flash count and homepage links in lower right */}
       <div className="absolute bottom-2 right-2 flex items-center gap-3 text-xs text-slate-400 z-10">
+        {version && <span className="text-slate-500">v{version}</span>}
         <div className="flex items-center gap-1">
           <svg
             xmlns="http://www.w3.org/2000/svg"
