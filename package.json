@@ -11,7 +11,7 @@
     "lint:fix": "biome lint --fix && biome format --write",
     "preview": "vite preview",
     "deploy": "npx convex deploy --cmd 'bun run build' && wrangler deploy && wrangler deploy --config wrangler-registry.json",
-    "generate:firmware-patch": "cd vendor/firmware && git diff develop..meshenvy/module-registry > ../../firmware-patch.diff"
+    "generate:firmware-patch": "bash scripts/generate-firmware-patch.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.937.0",
