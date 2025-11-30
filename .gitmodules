@@ -11,3 +11,9 @@
 [submodule "vendor/mpm"]
 	path = vendor/mpm
 	url = git@github.com:MeshEnvy/mpm.git
+[submodule "vendor/lobbs"]
+	path = vendor/lobbs
+	url = git@github.com:MeshEnvy/lobbs.git
+[submodule "vendor/lodb"]
+	path = vendor/lodb
+	url = git@github.com:MeshEnvy/lodb.git
