@@ -3,8 +3,10 @@
     "name": "LoDB",
     "description": "Micro database for Meshtastic - A synchronous, protobuf-based database for Meshtastic",
     "repo": "https://github.com/MeshEnvy/lodb",
+    "homepage": "https://github.com/MeshEnvy/lodb",
     "version": "1.0.0",
     "author": "benallfree",
+    "featured": false,
     "dependencies": {
       "meshtastic": ">=2.7.0"
     }
@@ -14,7 +16,9 @@
     "author": "benallfree",
     "description": "BBS for Meshtastic right on the firmware - A full bulletin board system that runs entirely inside the Meshtastic firmware",
     "repo": "https://github.com/MeshEnvy/lobbs",
+    "homepage": "https://github.com/MeshEnvy/lobbs",
     "version": "1.0.0",
+    "featured": true,
     "dependencies": {
       "lodb": ">=1.0.0",
       "meshtastic": ">=2.7.0"

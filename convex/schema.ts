@@ -7,6 +7,7 @@ export const buildConfigFields = {
   version: v.string(),
   modulesExcluded: v.record(v.string(), v.boolean()),
   target: v.string(),
+  pluginsEnabled: v.optional(v.array(v.string())),
 }
 
 export const profileFields = {
@@ -32,10 +33,17 @@ export const buildFields = {
   githubRunId: v.optional(v.number()),
 }
 
+export const pluginFields = {
+  slug: v.string(),
+  flashCount: v.number(),
+  updatedAt: v.number(),
+}
+
 export const schema = defineSchema({
   ...authTables,
   profiles: defineTable(profileFields),
   builds: defineTable(buildFields),
+  plugins: defineTable(pluginFields).index('by_slug', ['slug']),
 })
 
 export type ProfilesDoc = Doc<'profiles'>

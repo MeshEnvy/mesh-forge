@@ -9,6 +9,7 @@ export const dispatchGithubBuild = action({
     flags: v.string(),
     version: v.string(),
     buildHash: v.string(),
+    plugins: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const githubToken = process.env.GITHUB_TOKEN
@@ -37,6 +38,7 @@ export const dispatchGithubBuild = action({
         build_id: args.buildId,
         build_hash: args.buildHash,
         convex_url: convexUrl || 'https://example.com', // Fallback to avoid missing input error if that's the cause
+        plugins: (args.plugins ?? []).join(' '),
       },
     }
 

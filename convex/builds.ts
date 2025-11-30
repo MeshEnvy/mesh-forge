@@ -45,19 +45,23 @@ export function computeFlagsFromConfig(config: BuildConfigFields): string {
 }
 
 /**
- * Computes a stable SHA-256 hash from version, target, and flags.
+ * Computes a stable SHA-256 hash from version, target, flags, and plugins.
  * Internal helper for hash computation.
  */
 async function computeBuildHashInternal(
   version: string,
   target: string,
-  flags: string
+  flags: string,
+  plugins: string[]
 ): Promise<string> {
   // Input is now the exact parameters used for the build
+  // Sort plugins array for consistent hashing
+  const sortedPlugins = [...plugins].sort()
   const input = JSON.stringify({
     version,
     target,
     flags,
+    plugins: sortedPlugins,
   })
 
   // Use Web Crypto API for SHA-256 hashing
@@ -78,10 +82,12 @@ export async function computeBuildHash(
   config: BuildConfigFields
 ): Promise<{ hash: string; flags: string }> {
   const flags = computeFlagsFromConfig(config)
+  const plugins = config.pluginsEnabled ?? []
   const hash = await computeBuildHashInternal(
     config.version,
     config.target,
-    flags
+    flags,
+    plugins
   )
   return { hash, flags }
 }
@@ -146,6 +152,7 @@ export const upsertBuild = internalMutation({
       buildId,
       flags,
       buildHash,
+      plugins: config.pluginsEnabled ?? [],
     })
 
     return buildId
@@ -157,6 +164,7 @@ export const ensureBuildFromConfig = mutation({
     target: v.string(),
     version: v.string(),
     modulesExcluded: v.optional(v.record(v.string(), v.boolean())),
+    pluginsEnabled: v.optional(v.array(v.string())),
     profileName: v.optional(v.string()),
     profileDescription: v.optional(v.string()),
   },
@@ -166,6 +174,7 @@ export const ensureBuildFromConfig = mutation({
       version: args.version,
       modulesExcluded: args.modulesExcluded ?? {},
       target: args.target,
+      pluginsEnabled: args.pluginsEnabled,
     }
 
     // Compute build hash (single source of truth)
@@ -299,6 +308,13 @@ async function generateAuthenticatedDownloadUrl(
       flashCount: nextCount,
       updatedAt: Date.now(),
     })
+
+    // Increment plugin flash counts if build has plugins enabled
+    if (build.config.pluginsEnabled && build.config.pluginsEnabled.length > 0) {
+      await ctx.runMutation(internal.plugins.incrementFlashCount, {
+        slugs: build.config.pluginsEnabled,
+      })
+    }
   }
 
   // Slugify profile name for filename
@@ -377,7 +393,17 @@ export const generateAnonymousDownloadUrl = mutation({
     build: v.object(buildFields),
     slug: v.string(),
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    // Increment plugin flash counts if build has plugins enabled
+    if (
+      args.build.config.pluginsEnabled &&
+      args.build.config.pluginsEnabled.length > 0
+    ) {
+      await ctx.runMutation(internal.plugins.incrementFlashCount, {
+        slugs: args.build.config.pluginsEnabled,
+      })
+    }
+
     let objectKey = args.build.artifactPath || ''
     if (objectKey.startsWith('/')) {
       objectKey = objectKey.substring(1)

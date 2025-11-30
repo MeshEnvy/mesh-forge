@@ -1,12 +1,14 @@
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ModuleToggle } from '@/components/ModuleToggle'
+import { PluginToggle } from '@/components/PluginToggle'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import modulesData from '../../convex/modules.json'
+import registryData from '../../registry/registry.json'
 import { TARGETS } from '../constants/targets'
 import { VERSIONS } from '../constants/versions'
 
@@ -34,6 +36,7 @@ const DEFAULT_TARGET =
 export default function BuildNew() {
   const navigate = useNavigate()
   const ensureBuildFromConfig = useMutation(api.builds.ensureBuildFromConfig)
+  const pluginFlashCounts = useQuery(api.plugins.getAll) ?? {}
 
   const STORAGE_KEY = 'quick_build_target'
   const persistTargetSelection = (targetId: string) => {
@@ -51,9 +54,11 @@ export default function BuildNew() {
   const [selectedTarget, setSelectedTarget] = useState<string>(DEFAULT_TARGET)
   const [selectedVersion, setSelectedVersion] = useState<string>(VERSIONS[0])
   const [moduleConfig, setModuleConfig] = useState<Record<string, boolean>>({})
+  const [pluginConfig, setPluginConfig] = useState<Record<string, boolean>>({})
   const [isFlashing, setIsFlashing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showModuleOverrides, setShowModuleOverrides] = useState(false)
+  const [showPlugins, setShowPlugins] = useState(true)
 
   useEffect(() => {
     if (!activeCategory && TARGET_CATEGORIES.length > 0) {
@@ -107,6 +112,9 @@ export default function BuildNew() {
   }, [selectedTarget])
 
   const moduleCount = Object.keys(moduleConfig).length
+  const pluginCount = Object.keys(pluginConfig).filter(
+    (id) => pluginConfig[id] === true
+  ).length
   const selectedTargetLabel =
     (selectedTarget && TARGETS[selectedTarget]?.name) || selectedTarget
 
@@ -122,15 +130,31 @@ export default function BuildNew() {
     })
   }
 
+  const handleTogglePlugin = (id: string, enabled: boolean) => {
+    setPluginConfig((prev) => {
+      const next = { ...prev }
+      if (enabled) {
+        next[id] = true
+      } else {
+        delete next[id]
+      }
+      return next
+    })
+  }
+
   const handleFlash = async () => {
     if (!selectedTarget) return
     setIsFlashing(true)
     setErrorMessage(null)
     try {
+      const pluginsEnabled = Object.keys(pluginConfig).filter(
+        (id) => pluginConfig[id] === true
+      )
       const result = await ensureBuildFromConfig({
         target: selectedTarget,
         version: selectedVersion,
         modulesExcluded: moduleConfig,
+        pluginsEnabled: pluginsEnabled.length > 0 ? pluginsEnabled : undefined,
       })
       navigate(`/builds/${result.buildHash}`)
     } catch (error) {
@@ -240,7 +264,7 @@ export default function BuildNew() {
               className="w-full flex items-center justify-between text-left"
             >
               <div>
-                <p className="text-sm font-medium">Module overrides</p>
+                <p className="text-sm font-medium">Core Modules</p>
                 <p className="text-xs text-slate-400">
                   {moduleCount === 0
                     ? 'Using default modules for this target.'
@@ -256,6 +280,14 @@ export default function BuildNew() {
 
             {showModuleOverrides && (
               <div className="space-y-2 pr-1">
+                <div className="rounded-lg bg-slate-800/50 border border-slate-700 p-3">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Core Modules are officially maintained modules by
+                    Meshtastic. They are selectively included or excluded by
+                    default depending on the target device. You can explicitly
+                    exclude modules you know you don't want.
+                  </p>
+                </div>
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -279,6 +311,77 @@ export default function BuildNew() {
                       }
                     />
                   ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-6">
+            <button
+              type="button"
+              onClick={() => setShowPlugins((prev) => !prev)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <div>
+                <p className="text-sm font-medium">Plugins</p>
+                <p className="text-xs text-slate-400">
+                  {pluginCount === 0
+                    ? 'No plugins enabled.'
+                    : `${pluginCount} plugin${pluginCount === 1 ? '' : 's'} enabled.`}
+                </p>
+              </div>
+              {showPlugins ? (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
+
+            {showPlugins && (
+              <div className="space-y-2 pr-1">
+                <div className="rounded-lg bg-slate-800/50 border border-slate-700 p-3">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Plugins are 3rd party add-ons. They are not maintained,
+                    endorsed, or supported by Meshtastic. Use at your own risk.
+                  </p>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-xs text-slate-400 hover:text-white underline"
+                    onClick={() => setPluginConfig({})}
+                    disabled={pluginCount === 0}
+                  >
+                    Reset plugins
+                  </button>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {Object.entries(registryData)
+                    .sort(([, pluginA], [, pluginB]) => {
+                      // Featured plugins first
+                      const featuredA = pluginA.featured ?? false
+                      const featuredB = pluginB.featured ?? false
+                      if (featuredA !== featuredB) {
+                        return featuredA ? -1 : 1
+                      }
+                      // Then alphabetical by name
+                      return pluginA.name.localeCompare(pluginB.name)
+                    })
+                    .map(([slug, plugin]) => (
+                      <PluginToggle
+                        key={slug}
+                        id={slug}
+                        name={plugin.name}
+                        description={plugin.description}
+                        isEnabled={pluginConfig[slug] === true}
+                        onToggle={(enabled) =>
+                          handleTogglePlugin(slug, enabled)
+                        }
+                        featured={plugin.featured ?? false}
+                        flashCount={pluginFlashCounts[slug] ?? 0}
+                        homepage={plugin.homepage}
+                      />
+                    ))}
                 </div>
               </div>
             )}
