@@ -147,9 +147,15 @@ export default function BuildNew() {
     setIsFlashing(true)
     setErrorMessage(null)
     try {
-      const pluginsEnabled = Object.keys(pluginConfig).filter(
+      const enabledSlugs = Object.keys(pluginConfig).filter(
         (id) => pluginConfig[id] === true
       )
+      const pluginsEnabled = enabledSlugs.map((slug) => {
+        const plugin = (registryData as Record<string, { version: string }>)[
+          slug
+        ]
+        return `${slug}@${plugin.version}`
+      })
       const result = await ensureBuildFromConfig({
         target: selectedTarget,
         version: selectedVersion,

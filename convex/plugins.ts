@@ -29,7 +29,10 @@ export const getAll = query({
 export const incrementFlashCount = internalMutation({
   args: { slugs: v.array(v.string()) },
   handler: async (ctx, args) => {
-    for (const slug of args.slugs) {
+    for (const pluginSpec of args.slugs) {
+      // Extract slug from "slug@version" format, or use as-is if no @ present
+      const slug = pluginSpec.split('@')[0]
+
       const existing = await ctx.db
         .query('plugins')
         .withIndex('by_slug', (q) => q.eq('slug', slug))
