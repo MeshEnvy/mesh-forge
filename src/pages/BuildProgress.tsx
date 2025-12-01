@@ -1,5 +1,4 @@
-import { useMutation, useQuery } from 'convex/react'
-import { pick } from 'convex-helpers'
+import { useQuery } from 'convex/react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -11,10 +10,10 @@ import {
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { BuildDownloadButton } from '@/components/BuildDownloadButton'
 import { Button } from '@/components/ui/button'
 import { humanizeStatus } from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
-import { type BuildFields, buildFields } from '../../convex/schema'
 import { TARGETS } from '../constants/targets'
 
 export default function BuildProgress() {
@@ -22,16 +21,6 @@ export default function BuildProgress() {
   const build = useQuery(
     api.builds.getByHash,
     buildHash ? { buildHash } : 'skip'
-  )
-  const generateDownloadUrl = useMutation(
-    api.builds.generateAnonymousDownloadUrl
-  )
-  const generateSourceDownloadUrl = useMutation(
-    api.builds.generateAnonymousSourceDownloadUrl
-  )
-  const [downloadError, setDownloadError] = useState<string | null>(null)
-  const [sourceDownloadError, setSourceDownloadError] = useState<string | null>(
-    null
   )
   const [shareUrlCopied, setShareUrlCopied] = useState(false)
 
@@ -86,36 +75,6 @@ export default function BuildProgress() {
     : undefined
   const targetLabel = targetMeta?.name ?? build.config.target
   const status = build.status || 'queued'
-
-  const handleDownload = async () => {
-    setDownloadError(null)
-    try {
-      const url = await generateDownloadUrl({
-        build: pick(build, Object.keys(buildFields) as (keyof BuildFields)[]),
-        slug: `quick-build`,
-      })
-      window.location.href = url
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setDownloadError('Failed to generate download link.')
-      console.error('Download error', message)
-    }
-  }
-
-  const handleSourceDownload = async () => {
-    setSourceDownloadError(null)
-    try {
-      const url = await generateSourceDownloadUrl({
-        build: pick(build, Object.keys(buildFields) as (keyof BuildFields)[]),
-        slug: `quick-build`,
-      })
-      window.location.href = url
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setSourceDownloadError('Failed to generate source download link.')
-      console.error('Source download error', message)
-    }
-  }
 
   const getStatusIcon = () => {
     if (status === 'success') {
@@ -274,32 +233,20 @@ export default function BuildProgress() {
           )}
 
           {status === 'success' && build.artifactPath && (
-            <div className="space-y-2">
-              <Button
-                onClick={handleDownload}
-                className="w-full bg-cyan-600 hover:bg-cyan-700"
-              >
-                Download firmware
-              </Button>
-              {downloadError && (
-                <p className="text-sm text-red-400">{downloadError}</p>
-              )}
-            </div>
+            <BuildDownloadButton
+              build={build}
+              type="firmware"
+              className="w-full bg-cyan-600 hover:bg-cyan-700"
+            />
           )}
 
           {build.sourceUrl && (
-            <div className="space-y-2">
-              <Button
-                onClick={handleSourceDownload}
-                className="w-full bg-slate-700 hover:bg-slate-600"
-                variant="outline"
-              >
-                Download source
-              </Button>
-              {sourceDownloadError && (
-                <p className="text-sm text-red-400">{sourceDownloadError}</p>
-              )}
-            </div>
+            <BuildDownloadButton
+              build={build}
+              type="source"
+              variant="outline"
+              className="w-full bg-slate-700 hover:bg-slate-600"
+            />
           )}
 
           {status === 'failure' && (

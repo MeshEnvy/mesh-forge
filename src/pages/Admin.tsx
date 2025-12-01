@@ -2,6 +2,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { BuildDownloadButton } from '@/components/BuildDownloadButton'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -201,6 +202,18 @@ export default function Admin() {
                           ))}
                         </div>
                       )}
+                    {(build.artifactPath ||
+                      build.sourceUrl ||
+                      build.buildHash) && (
+                      <div className="mt-3 flex gap-3">
+                        {build.artifactPath && (
+                          <BuildDownloadButton build={build} type="firmware" />
+                        )}
+                        {(build.sourceUrl || build.buildHash) && (
+                          <BuildDownloadButton build={build} type="source" />
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="ml-4">
                     <Button
