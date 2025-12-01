@@ -142,10 +142,10 @@ jobs:
 
           update_status uploading_firmware
           # Determine file extension based on target (most are .bin, some might be .uf2)
-          BUILD_FILE="firmware/.pio/build/${{ inputs.target }}/firmware.bin"
+          BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.bin"
           FILE_EXT=".bin"
           if [ ! -f "$BUILD_FILE" ]; then
-            BUILD_FILE="firmware/.pio/build/${{ inputs.target }}/firmware.uf2"
+            BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.uf2"
             FILE_EXT=".uf2"
           fi
           
