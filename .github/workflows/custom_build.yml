@@ -46,9 +46,14 @@ jobs:
           update_status() {
             local state=$1
             local artifact_path=$2
+            local source_path=$3
             local payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
-            if [ -n "$artifact_path" ]; then
+            if [ -n "$artifact_path" ] && [ -n "$source_path" ]; then
+              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"artifactPath\": \"$artifact_path\", \"sourcePath\": \"$source_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
+            elif [ -n "$artifact_path" ]; then
               payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"artifactPath\": \"$artifact_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
+            elif [ -n "$source_path" ]; then
+              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"sourcePath\": \"$source_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
             fi
             echo "✅ Updated status: $state"
             curl -sSf -X POST "$CONVEX_URL/github-webhook" \
@@ -85,23 +90,7 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Update Status - Loading caches
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status loading_caches
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.platformio
-            firmware/.pio/libdeps
-          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/platformio.ini') }}
-          restore-keys: |
-            ${{ runner.os }}-pio-
-
-      - name: Building Firmware
+      - name: Preparing Source
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -116,9 +105,6 @@ jobs:
           update_status installing_pip
           python -m pip install --upgrade pip
 
-          update_status installing_platformio
-          pip install platformio
-
           update_status installing_mpm
           pip install mesh-plugin-manager
 
@@ -129,35 +115,6 @@ jobs:
           update_status installing_meshtastic_plugins
           mpm install ${{ inputs.plugins }}
 
-          update_status building_firmware
-          echo "Building for target: ${{ inputs.target }}"
-          echo "Flags: ${{ inputs.flags }}"
-          echo "Plugins: ${{ inputs.plugins }}"
-          
-          # Inject flags into platformio.ini or environment
-          export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
-          echo "PLATFORMIO_BUILD_FLAGS set to: $PLATFORMIO_BUILD_FLAGS"
-          
-          pio run -e ${{ inputs.target }}
-
-          update_status uploading_firmware
-          # Determine file extension based on target (most are .bin, some might be .uf2)
-          BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.bin"
-          FILE_EXT=".bin"
-          if [ ! -f "$BUILD_FILE" ]; then
-            BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.uf2"
-            FILE_EXT=".uf2"
-          fi
-          
-          # Determine artifact path with correct extension (with leading slash for storage)
-          ARTIFACT_PATH="/${{ inputs.build_hash }}${FILE_EXT}"
-          # Object path for wrangler is bucket/key without leading slash
-          OBJECT_PATH="${R2_BUCKET_NAME}/${{ inputs.build_hash }}${FILE_EXT}"
-          
-          # Upload to R2 with hash and correct extension
-          wrangler r2 object put "$OBJECT_PATH" \
-            --file "$BUILD_FILE" --remote
-          
           # Create MESHFORGE.md with build metadata
           cat > MESHFORGE.md << EOF
           # Meshtastic Firmware Build Metadata
@@ -224,7 +181,68 @@ jobs:
           wrangler r2 object put "$SOURCE_OBJECT_PATH" \
             --file "${{ inputs.build_hash }}.tar.gz" --remote
 
-          update_status uploaded "$ARTIFACT_PATH"
+          update_status uploaded_source "" "$SOURCE_ARCHIVE_PATH"
+
+      - name: Update Status - Loading caches
+        shell: bash
+        run: |
+          source /tmp/update_status.sh
+          update_status loading_caches
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            firmware/.pio/libdeps
+          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
+      - name: Building Firmware
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        shell: bash
+        run: |
+          source /tmp/update_status.sh
+
+          update_status installing_platformio
+          pip install platformio
+
+          cd firmware
+          update_status building_firmware
+          echo "Building for target: ${{ inputs.target }}"
+          echo "Flags: ${{ inputs.flags }}"
+          echo "Plugins: ${{ inputs.plugins }}"
+
+          # Inject flags into platformio.ini or environment
+          export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
+          echo "PLATFORMIO_BUILD_FLAGS set to: $PLATFORMIO_BUILD_FLAGS"
+
+          pio run -e ${{ inputs.target }}
+
+          update_status uploading_firmware
+          # Determine file extension based on target (most are .bin, some might be .uf2)
+          BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.bin"
+          FILE_EXT=".bin"
+          if [ ! -f "$BUILD_FILE" ]; then
+            BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.uf2"
+            FILE_EXT=".uf2"
+          fi
+
+          # Determine artifact path with correct extension (with leading slash for storage)
+          ARTIFACT_PATH="/${{ inputs.build_hash }}${FILE_EXT}"
+          # Object path for wrangler is bucket/key without leading slash
+          OBJECT_PATH="${R2_BUCKET_NAME}/${{ inputs.build_hash }}${FILE_EXT}"
+
+          # Upload to R2 with hash and correct extension
+          wrangler r2 object put "$OBJECT_PATH" \
+            --file "$BUILD_FILE" --remote
+
+          SOURCE_ARCHIVE_PATH="/${{ inputs.build_hash }}.tar.gz"
+          update_status uploaded "$ARTIFACT_PATH" "$SOURCE_ARCHIVE_PATH"
 
       - name: Update Build Status - Final
         if: always()
