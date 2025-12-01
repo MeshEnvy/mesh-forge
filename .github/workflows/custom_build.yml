@@ -50,6 +50,7 @@ jobs:
             if [ -n "$artifact_path" ]; then
               payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"artifactPath\": \"$artifact_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
             fi
+            echo "✅ Updated status: $state"
             curl -sSf -X POST "$CONVEX_URL/github-webhook" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $CONVEX_BUILD_TOKEN" \
@@ -69,32 +70,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Update Status - Fetching Mesh Forge
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status checking_out_meshforge
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          path: meshforge
-      
-      - name: Update Status - Fetching Web Flasher
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status checking_out_web_flasher
-
-      - name: Checkout Web Flasher (this repo)
-        uses: actions/checkout@v4
-        with:
-          repository: meshtastic/web-flasher
-          ref: main
-          path: web-flasher
-          submodules: recursive
-          fetch-depth: 1
-
       - name: Update Status - Fetching Firmware
         shell: bash
         run: |
@@ -110,43 +85,11 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Apply Firmware Patch
-        shell: bash
-        run: |
-          cd firmware
-          git apply ../meshforge/firmware-patch.diff
-
-      - name: Update Status - Installing Poetry & Dependencies
+      - name: Update Status - Loading caches
         shell: bash
         run: |
           source /tmp/update_status.sh
-          update_status installing_poetry_dependencies
-
-      - name: Install Poetry & Dependencies
-        working-directory: firmware
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-
-      - name: Update Status - Installing plugins
-        if: ${{ inputs.plugins != '' }}
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status installing_plugins
-
-      - name: Install Plugins
-        if: ${{ inputs.plugins != '' }}
-        working-directory: firmware
-        run: |
-          poetry run mpm install ${{ inputs.plugins }}
-
-      - name: Update Status - Downloading PlatformIO Cache
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status downloading_platformio_cache
+          update_status loading_caches
 
       - name: Cache PlatformIO
         uses: actions/cache@v4
@@ -158,26 +101,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pio-
 
-      - name: Update Status - Installing PlatformIO
+      - name: Building Firmware
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         shell: bash
         run: |
           source /tmp/update_status.sh
-          update_status installing_platformio
 
-      - name: Install PlatformIO
-        run: |
+          update_status installing_pip
           python -m pip install --upgrade pip
+
+          update_status installing_platformio
           pip install platformio
 
-      - name: Update Status - Building Firmware
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status building_firmware
+          update_status installing_mpm
+          pip install mesh-plugin-manager
 
-      - name: Build Firmware
-        working-directory: firmware
-        run: |
+          cd firmware
+          update_status patching_firmware
+          mpm init
+
+          update_status installing_meshtastic_plugins
+          mpm install ${{ inputs.plugins }}
+
+          update_status building_firmware
           echo "Building for target: ${{ inputs.target }}"
           echo "Flags: ${{ inputs.flags }}"
           echo "Plugins: ${{ inputs.plugins }}"
@@ -188,43 +137,7 @@ jobs:
           
           pio run -e ${{ inputs.target }}
 
-      - name: Update Status - Preparing Upload
-        if: success()
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status preparing_upload
-
-      - name: Update Status - Installing Wrangler
-        if: success()
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status installing_wrangler
-
-      - name: Install Wrangler (for R2)
-        if: success()
-        shell: bash
-        run: |
-          npm install -g wrangler
-
-      - name: Update Status - Uploading uf2 to R2
-        if: success()
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status uploading_uf2_to_r2
-
-      - name: Upload to R2
-        if: success()
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status locating_build_file
+          update_status uploading_firmware
           # Determine file extension based on target (most are .bin, some might be .uf2)
           BUILD_FILE="firmware/.pio/build/${{ inputs.target }}/firmware.bin"
           FILE_EXT=".bin"
@@ -238,28 +151,9 @@ jobs:
           # Object path for wrangler is bucket/key without leading slash
           OBJECT_PATH="${R2_BUCKET_NAME}/${{ inputs.build_hash }}${FILE_EXT}"
           
-          update_status uploading
           # Upload to R2 with hash and correct extension
           wrangler r2 object put "$OBJECT_PATH" \
             --file "$BUILD_FILE" --remote
-          
-          # Update build with artifact path (with leading slash)
-          update_status uploaded "$ARTIFACT_PATH"
-          
-          echo "✅ Uploaded to R2: $ARTIFACT_PATH"
-
-      - name: Update Status - Creating Source Archive
-        if: success()
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status creating_source_archive
-
-      - name: Create Source Archive
-        if: success()
-        shell: bash
-        run: |
-          cd firmware
           
           # Create MESHFORGE.md with build metadata
           cat > MESHFORGE.md << EOF
@@ -318,32 +212,14 @@ jobs:
           cd ..
           git -C firmware archive --format=tar HEAD | gzip -9 > "${{ inputs.build_hash }}.tar.gz"
           
-          echo "✅ Created source archive: ${{ inputs.build_hash }}.tar.gz"
-          ls -lh "${{ inputs.build_hash }}.tar.gz"
-
-      - name: Update Status - Uploading Source Archive
-        if: success()
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
           update_status uploading_source_archive
 
-      - name: Upload Source Archive to R2
-        if: success()
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-        shell: bash
-        run: |
           SOURCE_ARCHIVE_PATH="/${{ inputs.build_hash }}.tar.gz"
           SOURCE_OBJECT_PATH="${R2_BUCKET_NAME}/${{ inputs.build_hash }}.tar.gz"
           
           # Upload source archive to R2
           wrangler r2 object put "$SOURCE_OBJECT_PATH" \
             --file "${{ inputs.build_hash }}.tar.gz" --remote
-          
-          echo "✅ Uploaded source archive to R2: $SOURCE_ARCHIVE_PATH"
 
       - name: Update Build Status - Final
         if: always()
