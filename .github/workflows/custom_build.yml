@@ -110,6 +110,9 @@ jobs:
         run: |
           source /tmp/update_status.sh
 
+          update_status installing_wrangler
+          npm install -g wrangler
+
           update_status installing_pip
           python -m pip install --upgrade pip
 
