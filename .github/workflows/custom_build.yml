@@ -224,6 +224,8 @@ jobs:
           wrangler r2 object put "$SOURCE_OBJECT_PATH" \
             --file "${{ inputs.build_hash }}.tar.gz" --remote
 
+          update_status uploaded "$ARTIFACT_PATH"
+
       - name: Update Build Status - Final
         if: always()
         shell: bash
