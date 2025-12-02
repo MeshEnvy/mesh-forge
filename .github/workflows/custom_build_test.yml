@@ -1,4 +1,4 @@
-name: Custom Firmware Build (Test)
+name: Custom Firmware Build
 
 on:
   workflow_dispatch:
@@ -161,6 +161,44 @@ jobs:
 
           - PlatformIO dependencies (\`.pio/\`) are not included - PlatformIO will download these as needed
           - The build flags above must be set exactly as shown to reproduce the build
+
+          ## License Compliance
+
+          This firmware build and all source code contained in this archive are licensed under the **GNU General Public License version 3 (GPL-3.0)** or later.
+
+          ### Your Rights
+
+          Under the GPL-3.0 license, you have the freedom to:
+
+          - **Use** this firmware for any purpose
+          - **Study** how it works and examine the source code
+          - **Modify** the source code to suit your needs
+          - **Distribute** original or modified versions
+          - **Share** improvements you make
+
+          ### Your Obligations
+
+          If you distribute this firmware (original or modified), you must:
+
+          - **Provide source code** - Make the complete, corresponding source code available to recipients
+          - **Include license** - Distribute the GPL-3.0 license text with the firmware
+          - **Preserve notices** - Maintain all copyright and license notices
+          - **Same license** - License any modifications under GPL-3.0 or compatible license
+          - **Document changes** - If you modify the code, document your changes
+
+          ### License Compliance Statement
+
+          This build archive contains source code from the Meshtastic firmware project and related dependencies, all of which are compliant with GPL-3.0 licensing requirements. The complete source code necessary to build this firmware is included in this archive, fulfilling the GPL-3.0 requirement to provide corresponding source code.
+
+          ### Full License Text
+
+          A copy of the GNU General Public License version 3 is included in the \`LICENSE\` file in the firmware directory. You can also view it online at: https://www.gnu.org/licenses/gpl-3.0.html
+
+          ### Questions?
+
+          For questions about licensing or compliance, please refer to:
+          - The GPL-3.0 FAQ: https://www.gnu.org/licenses/gpl-faq.html
+          - The Meshtastic project: https://meshtastic.org
           EOF
           
           # Create MESHFORGE.md so it gets included in the archive
