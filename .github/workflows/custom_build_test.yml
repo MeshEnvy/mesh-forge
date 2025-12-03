@@ -268,7 +268,18 @@ jobs:
 
           update_status uploading_firmware
           # Create tar.gz archive of firmware files from the target's build directory
-          tar -czf "firmware-${{ inputs.build_hash }}-${{ github.run_id }}.tar.gz" -C ".pio/build/${{ inputs.target }}" firmware*.*
+          # Change to the build directory and create archive from there
+          cd ".pio/build/${{ inputs.target }}"
+          if ls firmware* 1> /dev/null 2>&1; then
+            tar -czf "../../../firmware-${{ inputs.build_hash }}-${{ github.run_id }}.tar.gz" firmware*
+            cd ../../..
+          else
+            echo "Error: No firmware files found matching firmware* in .pio/build/${{ inputs.target }}/"
+            echo "Recursive listing of .pio/build/${{ inputs.target }}/:"
+            find . -type f -ls || true
+            cd ../../..
+            exit 1
+          fi
 
           # Determine artifact path (with leading slash for storage)
           ARTIFACT_PATH="/firmware-${{ inputs.build_hash }}-${{ github.run_id }}.tar.gz"
