@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { BuildDownloadButton } from '@/components/BuildDownloadButton'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { ArtifactType } from '../../convex/builds'
 
 type FilterType = 'all' | 'failed'
 
@@ -130,100 +131,124 @@ export default function Admin() {
                 key={build._id}
                 className="bg-slate-900 border border-slate-800 rounded-lg p-6"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-2">
-                      <h3 className="text-lg font-semibold">
-                        Build:{' '}
-                        <Link
-                          to={`/builds/${build.buildHash}`}
-                          className="text-cyan-400 hover:text-cyan-300 underline"
-                        >
-                          {build.buildHash.substring(0, 8)}
-                        </Link>
-                      </h3>
-                      {getStatusBadge(build.status)}
+                {/* Header Section */}
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl font-mono font-semibold text-white">
+                      {build.buildHash.substring(0, 8)}
+                    </span>
+                    {getStatusBadge(build.status)}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => navigate(`/builds/${build.buildHash}`)}
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 hover:bg-slate-800"
+                    >
+                      Public View
+                    </Button>
+                    <Button
+                      onClick={() => navigate(`/builds/new/${build.buildHash}`)}
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 hover:bg-slate-800"
+                    >
+                      Clone
+                    </Button>
+                    <Button
+                      onClick={() => handleRetry(build._id)}
+                      className="bg-cyan-600 hover:bg-cyan-700"
+                      size="sm"
+                    >
+                      Re-run Build
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Build Configuration Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm text-slate-500">Target</span>
+                      <div className="text-sm font-mono text-white mt-1">
+                        {build.config.target}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-slate-300">
-                      <div>
-                        <span className="text-slate-500">Target:</span>{' '}
-                        <span className="font-mono">{build.config.target}</span>
+                    <div>
+                      <span className="text-sm text-slate-500">Version</span>
+                      <div className="text-sm font-mono text-white mt-1">
+                        {build.config.version}
                       </div>
-                      <div>
-                        <span className="text-slate-500">Version:</span>{' '}
-                        <span className="font-mono">
-                          {build.config.version}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500">
-                          {build.completedAt ? 'Completed' : 'Started'}:
-                        </span>{' '}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm text-slate-500">
+                        {build.completedAt ? 'Completed' : 'Started'}
+                      </span>
+                      <div className="text-sm text-white mt-1">
                         {build.completedAt
                           ? formatDate(build.completedAt)
                           : build.startedAt
                             ? formatDate(build.startedAt)
                             : 'Unknown'}
                       </div>
-                      <div>
-                        <span className="text-slate-500">Run ID:</span>{' '}
-                        {build.githubRunId ? (
-                          <a
-                            href={`https://github.com/MeshEnvy/configurable-web-flasher/actions/runs/${build.githubRunId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-cyan-400 hover:text-cyan-300 underline"
-                          >
-                            {build.githubRunId}
-                          </a>
-                        ) : (
-                          'N/A'
-                        )}
-                      </div>
                     </div>
-                    {build.githubRunIdHistory &&
-                      build.githubRunIdHistory.length > 0 && (
-                        <div className="mt-2 text-xs text-slate-500">
-                          Previous runs:{' '}
-                          {build.githubRunIdHistory.map((id, idx) => (
-                            <span key={id}>
-                              <a
-                                href={`https://github.com/MeshEnvy/configurable-web-flasher/actions/runs/${id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-cyan-400 hover:text-cyan-300 underline"
-                              >
-                                {id}
-                              </a>
-                              {idx <
-                                (build.githubRunIdHistory?.length ?? 0) - 1 &&
-                                ', '}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    {(build.artifactPath ||
-                      build.sourceUrl ||
-                      build.buildHash) && (
-                      <div className="mt-3 flex gap-3">
-                        {build.artifactPath && (
-                          <BuildDownloadButton build={build} type="firmware" />
-                        )}
-                        {(build.sourceUrl || build.buildHash) && (
-                          <BuildDownloadButton build={build} type="source" />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="ml-4">
-                    <Button
-                      onClick={() => handleRetry(build._id)}
-                      className="bg-cyan-600 hover:bg-cyan-700"
-                    >
-                      Re-run Build
-                    </Button>
                   </div>
                 </div>
+
+                {/* Run History Section */}
+                {(build.githubRunId ||
+                  (build.githubRunIdHistory?.length ?? 0) > 0) && (
+                  <div className="mb-4 pb-4 border-b border-slate-800">
+                    <span className="text-xs text-slate-500 mb-2 block">
+                      Run History
+                      {(build.githubRunIdHistory?.length ?? 0) > 0 &&
+                        ` (${(build.githubRunIdHistory?.length ?? 0) + (build.githubRunId ? 1 : 0)} total)`}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {build.githubRunId && (
+                        <a
+                          href={`https://github.com/MeshEnvy/mesh-forge/actions/runs/${build.githubRunId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-cyan-400 hover:text-cyan-300 underline font-semibold"
+                          title="Current run"
+                        >
+                          {build.githubRunId}
+                        </a>
+                      )}
+                      {build.githubRunIdHistory?.map((id) => (
+                        <a
+                          key={id}
+                          href={`https://github.com/MeshEnvy/mesh-forge/actions/runs/${id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-cyan-400 hover:text-cyan-300 underline"
+                        >
+                          {id}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Download Actions */}
+                {build.buildHash && (
+                  <div className="flex gap-3">
+                    {build.status === 'success' && (
+                      <BuildDownloadButton
+                        build={build}
+                        type={ArtifactType.Firmware}
+                      />
+                    )}
+                    <BuildDownloadButton
+                      build={build}
+                      type={ArtifactType.Source}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

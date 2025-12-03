@@ -4,23 +4,19 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { api } from '../../convex/_generated/api'
+import type { Doc } from '../../convex/_generated/dataModel'
 import modulesData from '../../convex/modules.json'
-import type {
-  BuildConfigFields,
-  ProfileFields,
-  ProfilesDoc,
-} from '../../convex/schema'
 import { VERSIONS } from '../constants/versions'
 import { ModuleToggle } from './ModuleToggle'
 
 // Form values use flattened config for UI, but will be transformed to nested on submit
 type ProfileFormValues = Omit<
-  ProfileFields,
+  Doc<'profiles'>,
   '_id' | '_creationTime' | 'userId' | 'flashCount' | 'updatedAt'
 >
 
 interface ProfileEditorProps {
-  initialData?: ProfilesDoc
+  initialData?: Doc<'profiles'>
   onSave: () => void
   onCancel: () => void
 }
@@ -153,7 +149,7 @@ export default function ProfileEditor({
             {modulesData.modules.map((module) => {
               // Flattened config: config[id] === true -> Explicitly Excluded
               // config[id] === undefined/false -> Default (included if target supports)
-              const currentConfig = watch('config') as BuildConfigFields
+              const currentConfig = watch('config') as Doc<'builds'>['config']
               const configValue = currentConfig.modulesExcluded[module.id]
               const isExcluded = configValue === true
 

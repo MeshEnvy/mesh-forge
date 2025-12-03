@@ -52,9 +52,9 @@ http.route({
     await ctx.runMutation(internal.builds.updateBuildStatus, {
       buildId: payload.build_id,
       status: payload.state,
-      artifactPath: payload.artifactPath,
-      sourceUrl: payload.sourcePath,
       githubRunId,
+      firmwarePath: payload.firmwarePath ?? payload.artifactPath,
+      sourcePath: payload.sourcePath,
     })
 
     return new Response(null, { status: 200 })

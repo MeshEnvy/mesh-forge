@@ -29,6 +29,10 @@ export const dispatchGithubBuild = action({
       throw new Error('args.buildHash is missing or empty')
     }
 
+    // Use test workflow when running in Convex dev mode
+    const isDev = process.env.CONVEX_ENV === 'dev'
+    const workflowFile = isDev ? 'custom_build_test.yml' : 'custom_build.yml'
+
     const payload = {
       ref: 'main', // or make this configurable
       inputs: {
@@ -43,23 +47,22 @@ export const dispatchGithubBuild = action({
     }
 
     console.log(
-      'Dispatching GitHub build with payload:',
+      `Dispatching GitHub build to ${workflowFile} with payload:`,
       JSON.stringify(payload, null, 2)
     )
 
     try {
-      const response = await fetch(
-        'https://api.github.com/repos/MeshEnvy/configurable-web-flasher/actions/workflows/custom_build.yml/dispatches',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${githubToken}`,
-            Accept: 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      )
+      const url = `https://api.github.com/repos/MeshEnvy/mesh-forge/actions/workflows/${workflowFile}/dispatches`
+      console.log('GitHub API URL:', url)
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
 
       if (!response.ok) {
         const errorText = await response.text()

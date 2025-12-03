@@ -11,7 +11,6 @@ import ProfileEditor from '@/components/ProfileEditor'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
-import type { ProfileFields } from '../../convex/schema'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -19,7 +18,7 @@ export default function Dashboard() {
   const removeProfile = useMutation(api.profiles.remove)
   const [isCreating, setIsCreating] = useState(false)
 
-  const handleEdit = (profile: Doc<'profiles'> & ProfileFields) => {
+  const handleEdit = (profile: Doc<'profiles'>) => {
     navigate(`/dashboard/profiles/${profile._id}`)
   }
 

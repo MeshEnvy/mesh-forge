@@ -3,10 +3,12 @@ import { ArrowLeft, CheckCircle, Loader2, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ProfileStatisticPills } from '@/components/ProfileCard'
+import { SourceAvailable } from '@/components/SourceAvailable'
 import { Button } from '@/components/ui/button'
 import { humanizeStatus } from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { ArtifactType } from '../../convex/builds'
 import modulesData from '../../convex/modules.json'
 import { TARGETS } from '../constants/targets'
 
@@ -30,9 +32,6 @@ export default function ProfileFlash() {
     id ? { id: id as Id<'profiles'> } : 'skip'
   )
   const generateDownloadUrl = useMutation(api.builds.generateDownloadUrl)
-  const generateSourceDownloadUrl = useMutation(
-    api.builds.generateSourceDownloadUrl
-  )
 
   useEffect(() => {
     if (id && target && profile) {
@@ -94,12 +93,13 @@ export default function ProfileFlash() {
   const totalFlashes = profile.flashCount ?? 0
 
   const handleDownload = async () => {
-    if (!id || !build.artifactPath) return
+    if (!id || !build.buildHash) return
 
     try {
       const url = await generateDownloadUrl({
         buildId: build._id,
         profileId: id as Id<'profiles'>,
+        artifactType: ArtifactType.Firmware,
       })
       window.location.href = url
     } catch (error) {
@@ -111,9 +111,10 @@ export default function ProfileFlash() {
     if (!id) return
 
     try {
-      const url = await generateSourceDownloadUrl({
+      const url = await generateDownloadUrl({
         buildId: build._id,
         profileId: id as Id<'profiles'>,
+        artifactType: ArtifactType.Source,
       })
       window.location.href = url
     } catch (error) {
@@ -139,7 +140,7 @@ export default function ProfileFlash() {
 
   const githubActionUrl =
     build.githubRunId && build.githubRunId > 0
-      ? `https://github.com/MeshEnvy/configurable-web-flasher/actions/runs/${build.githubRunId}`
+      ? `https://github.com/MeshEnvy/mesh-forge/actions/runs/${build.githubRunId}`
       : null
 
   return (
@@ -232,7 +233,7 @@ export default function ProfileFlash() {
             </div>
           </div>
 
-          {build.status === 'success' && build.artifactPath && (
+          {build.status === 'success' && build.buildHash && (
             <div className="space-y-2">
               <Button
                 onClick={handleDownload}
@@ -243,7 +244,7 @@ export default function ProfileFlash() {
             </div>
           )}
 
-          {build.sourceUrl && (
+          <SourceAvailable sourcePath={build.sourcePath}>
             <div className="space-y-2">
               <Button
                 onClick={handleSourceDownload}
@@ -253,7 +254,7 @@ export default function ProfileFlash() {
                 Download Source
               </Button>
             </div>
-          )}
+          </SourceAvailable>
         </div>
       </div>
     </div>

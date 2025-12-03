@@ -1,14 +1,15 @@
 import { useMutation } from 'convex/react'
-import { pick } from 'convex-helpers'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { SourceAvailable } from '@/components/SourceAvailable'
 import { Button } from '@/components/ui/button'
 import { api } from '../../convex/_generated/api'
-import { type BuildFields, buildFields } from '../../convex/schema'
+import type { Doc } from '../../convex/_generated/dataModel'
+import { ArtifactType } from '../../convex/builds'
 
 interface BuildDownloadButtonProps {
-  build: BuildFields
-  type: 'firmware' | 'source'
+  build: Doc<'builds'>
+  type: ArtifactType
   variant?: 'default' | 'outline'
   className?: string
 }
@@ -19,21 +20,16 @@ export function BuildDownloadButton({
   variant,
   className,
 }: BuildDownloadButtonProps) {
-  const generateDownloadUrl = useMutation(
-    api.builds.generateAnonymousDownloadUrl
-  )
-  const generateSourceDownloadUrl = useMutation(
-    api.builds.generateAnonymousSourceDownloadUrl
-  )
+  const generateDownloadUrl = useMutation(api.builds.generateDownloadUrl)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Default styling based on type
   const defaultVariant =
-    variant ?? (type === 'firmware' ? 'default' : 'outline')
+    variant ?? (type === ArtifactType.Firmware ? 'default' : 'outline')
   const defaultClassName =
     className ??
-    (type === 'firmware'
+    (type === ArtifactType.Firmware
       ? 'bg-cyan-600 hover:bg-cyan-700'
       : 'bg-slate-700 hover:bg-slate-600')
 
@@ -41,27 +37,15 @@ export function BuildDownloadButton({
     setError(null)
     setIsLoading(true)
     try {
-      const url =
-        type === 'firmware'
-          ? await generateDownloadUrl({
-              build: pick(
-                build,
-                Object.keys(buildFields) as (keyof BuildFields)[]
-              ),
-              slug: 'download',
-            })
-          : await generateSourceDownloadUrl({
-              build: pick(
-                build,
-                Object.keys(buildFields) as (keyof BuildFields)[]
-              ),
-              slug: 'download',
-            })
+      const url = await generateDownloadUrl({
+        buildId: build._id,
+        artifactType: type,
+      })
       window.location.href = url
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       const errorMsg =
-        type === 'firmware'
+        type === ArtifactType.Firmware
           ? 'Failed to generate download link.'
           : 'Failed to generate source download link.'
       setError(errorMsg)
@@ -73,10 +57,9 @@ export function BuildDownloadButton({
     }
   }
 
-  if (type === 'firmware' && !build.artifactPath) return null
-  if (type === 'source' && !build.sourceUrl && !build.buildHash) return null
+  if (type === ArtifactType.Firmware && !build.buildHash) return null
 
-  return (
+  const button = (
     <div className="space-y-2">
       <Button
         onClick={handleDownload}
@@ -84,9 +67,18 @@ export function BuildDownloadButton({
         variant={defaultVariant}
         className={defaultClassName}
       >
-        Download {type === 'firmware' ? 'firmware' : 'source'}
+        Download {type === ArtifactType.Firmware ? 'firmware' : 'source'}
       </Button>
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   )
+
+  // For source downloads, only show when sourcePath is available
+  if (type === ArtifactType.Source) {
+    return (
+      <SourceAvailable sourcePath={build.sourcePath}>{button}</SourceAvailable>
+    )
+  }
+
+  return button
 }

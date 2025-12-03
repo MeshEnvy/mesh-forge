@@ -45,13 +45,11 @@ jobs:
           cat > /tmp/update_status.sh << 'EOF'
           update_status() {
             local state=$1
-            local artifact_path=$2
+            local firmware_path=$2
             local source_path=$3
             local payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
-            if [ -n "$artifact_path" ] && [ -n "$source_path" ]; then
-              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"artifactPath\": \"$artifact_path\", \"sourcePath\": \"$source_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
-            elif [ -n "$artifact_path" ]; then
-              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"artifactPath\": \"$artifact_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
+            if [ -n "$firmware_path" ]; then
+              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"firmwarePath\": \"$firmware_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
             elif [ -n "$source_path" ]; then
               payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"sourcePath\": \"$source_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
             fi
@@ -166,6 +164,9 @@ jobs:
           # Create MESHFORGE.md so it gets included in the archive
           # (already created above, just ensuring it exists)
           
+          # Define archive suffix for consistent naming
+          ARTIFACT_ARCHIVE_SUFFIX="-${{ inputs.build_hash }}-${{ github.run_id }}.tar.gz"
+          
           # Create archive from working directory to include plugins installed by mpm
           # Exclude .git, .pio, and build artifacts
           cd ..
@@ -174,17 +175,17 @@ jobs:
               --exclude='*.bin' \
               --exclude='*.uf2' \
               --exclude='build' \
-              -czf "${{ inputs.build_hash }}.tar.gz" \
+              -czf "source${ARTIFACT_ARCHIVE_SUFFIX}" \
               -C firmware .
           
           update_status uploading_source_archive
 
-          SOURCE_ARCHIVE_PATH="/${{ inputs.build_hash }}.tar.gz"
-          SOURCE_OBJECT_PATH="${R2_BUCKET_NAME}/${{ inputs.build_hash }}.tar.gz"
+          SOURCE_ARCHIVE_PATH="/source${ARTIFACT_ARCHIVE_SUFFIX}"
+          SOURCE_OBJECT_PATH="${R2_BUCKET_NAME}/source${ARTIFACT_ARCHIVE_SUFFIX}"
           
           # Upload source archive to R2
           wrangler r2 object put "$SOURCE_OBJECT_PATH" \
-            --file "${{ inputs.build_hash }}.tar.gz" --remote
+            --file "source${ARTIFACT_ARCHIVE_SUFFIX}" --remote
 
           update_status uploaded_source "" "$SOURCE_ARCHIVE_PATH"
 
@@ -229,24 +230,33 @@ jobs:
           pio run -e ${{ inputs.target }}
 
           update_status uploading_firmware
-          # Determine file extension based on target (most are .bin, some might be .uf2)
-          BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.bin"
-          FILE_EXT=".bin"
-          if [ ! -f "$BUILD_FILE" ]; then
-            BUILD_FILE=".pio/build/${{ inputs.target }}/firmware.uf2"
-            FILE_EXT=".uf2"
+          # Create tar.gz archive of all build artifacts from the target's build directory
+          # Change to the build directory and create archive from there
+          cd ".pio/build/${{ inputs.target }}"
+          # Find all build artifacts with specified extensions
+          ARTIFACTS=$(find . -maxdepth 1 -type f \( -name "*.bin" -o -name "*.hex" -o -name "*.elf" -o -name "*.uf2" -o -name "*.dat" -o -name "*.zip" \))
+          if [ -n "$ARTIFACTS" ]; then
+            # Create archive with all found artifacts
+            tar -czf "../../../firmware${ARTIFACT_ARCHIVE_SUFFIX}" $(find . -maxdepth 1 -type f \( -name "*.bin" -o -name "*.hex" -o -name "*.elf" -o -name "*.uf2" -o -name "*.dat" -o -name "*.zip" \))
+            cd ../../..
+          else
+            echo "Error: No build artifacts found matching [.bin, .hex, .elf, .uf2, .dat, .zip] in .pio/build/${{ inputs.target }}/"
+            echo "Recursive listing of .pio/build/${{ inputs.target }}/:"
+            find . -type f -ls || true
+            cd ../../..
+            exit 1
           fi
 
-          # Determine artifact path with correct extension (with leading slash for storage)
-          ARTIFACT_PATH="/${{ inputs.build_hash }}${FILE_EXT}"
+          # Determine artifact path (with leading slash for storage)
+          ARTIFACT_PATH="/firmware${ARTIFACT_ARCHIVE_SUFFIX}"
           # Object path for wrangler is bucket/key without leading slash
-          OBJECT_PATH="${R2_BUCKET_NAME}/${{ inputs.build_hash }}${FILE_EXT}"
+          OBJECT_PATH="${R2_BUCKET_NAME}/firmware${ARTIFACT_ARCHIVE_SUFFIX}"
 
-          # Upload to R2 with hash and correct extension
+          # Upload to R2 with hash and tar.gz extension
           wrangler r2 object put "$OBJECT_PATH" \
-            --file "$BUILD_FILE" --remote
+            --file "firmware${ARTIFACT_ARCHIVE_SUFFIX}" --remote
 
-          SOURCE_ARCHIVE_PATH="/${{ inputs.build_hash }}.tar.gz"
+          SOURCE_ARCHIVE_PATH="/source${ARTIFACT_ARCHIVE_SUFFIX}"
           update_status uploaded "$ARTIFACT_PATH" "$SOURCE_ARCHIVE_PATH"
 
       - name: Update Build Status - Final

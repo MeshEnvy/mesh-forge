@@ -1,7 +1,6 @@
 import { authTables } from '@convex-dev/auth/server'
 import { defineSchema, defineTable } from 'convex/server'
-import { type Infer, v } from 'convex/values'
-import type { Doc } from './_generated/dataModel'
+import { v } from 'convex/values'
 
 export const buildConfigFields = {
   version: v.string(),
@@ -29,8 +28,10 @@ export const buildFields = {
 
   // Optional props
   completedAt: v.optional(v.number()),
-  artifactPath: v.optional(v.string()),
-  sourceUrl: v.optional(v.string()),
+  artifactPath: v.optional(v.string()), // Deprecated
+  firmwarePath: v.optional(v.string()),
+  sourceUrl: v.optional(v.string()), // Deprecated
+  sourcePath: v.optional(v.string()),
   githubRunId: v.optional(v.number()),
   githubRunIdHistory: v.optional(v.array(v.number())),
 }
@@ -54,14 +55,7 @@ export const schema = defineSchema({
   userSettings: defineTable(userSettingsFields).index('by_user', ['userId']),
 })
 
-export type ProfilesDoc = Doc<'profiles'>
-export type BuildsDoc = Doc<'builds'>
 export const buildsDocValidator = schema.tables.builds.validator
 export const profilesDocValidator = schema.tables.profiles.validator
-export type ProfileFields = Infer<typeof profilesDocValidator>
-export type BuildFields = Infer<typeof buildsDocValidator>
-
-const buildConfigFieldsValidator = v.object(buildConfigFields)
-export type BuildConfigFields = Infer<typeof buildConfigFieldsValidator>
 
 export default schema

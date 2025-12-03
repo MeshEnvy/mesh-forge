@@ -66,10 +66,12 @@ export const retryBuild = adminMutation({
       plugins: build.config.pluginsEnabled ?? [],
     })
 
-    // Update build status to queued
+    // Update build status to queued and clear artifact paths
     await ctx.db.patch(args.buildId, {
       status: 'queued',
       updatedAt: Date.now(),
+      firmwarePath: undefined,
+      sourcePath: undefined,
     })
 
     return { success: true }

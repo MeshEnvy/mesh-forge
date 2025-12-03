@@ -14,6 +14,7 @@ import { BuildDownloadButton } from '@/components/BuildDownloadButton'
 import { Button } from '@/components/ui/button'
 import { humanizeStatus } from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
+import { ArtifactType } from '../../convex/builds'
 import { TARGETS } from '../constants/targets'
 
 export default function BuildProgress() {
@@ -94,7 +95,7 @@ export default function BuildProgress() {
 
   const githubActionUrl =
     build.githubRunId && build.githubRunId > 0
-      ? `https://github.com/MeshEnvy/configurable-web-flasher/actions/runs/${build.githubRunId}`
+      ? `https://github.com/MeshEnvy/mesh-forge/actions/runs/${build.githubRunId}`
       : null
 
   const shareUrl = `${window.location.origin}/builds/new/${build.buildHash}`
@@ -232,18 +233,18 @@ export default function BuildProgress() {
             </div>
           )}
 
-          {status === 'success' && build.artifactPath && (
+          {status === 'success' && build.buildHash && (
             <BuildDownloadButton
               build={build}
-              type="firmware"
+              type={ArtifactType.Firmware}
               className="w-full bg-cyan-600 hover:bg-cyan-700"
             />
           )}
 
-          {build.sourceUrl && (
+          {build.buildHash && (
             <BuildDownloadButton
               build={build}
-              type="source"
+              type={ArtifactType.Source}
               variant="outline"
               className="w-full bg-slate-700 hover:bg-slate-600"
             />

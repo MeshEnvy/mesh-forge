@@ -1,12 +1,15 @@
-import { getAuthUserId } from '@convex-dev/auth/server'
-import type { GenericMutationCtx } from 'convex/server'
 import { v } from 'convex/values'
 import { pick } from 'convex-helpers'
 import { api, internal } from './_generated/api'
-import type { DataModel, Id } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { internalMutation, mutation, query } from './_generated/server'
 import { generateSignedDownloadUrl } from './lib/r2'
-import { type BuildConfigFields, type BuildFields, buildFields } from './schema'
+import { buildFields } from './schema'
+
+export enum ArtifactType {
+  Firmware = 'firmware',
+  Source = 'source',
+}
 
 type BuildUpdateData = {
   status: string
@@ -35,13 +38,40 @@ export const getByHash = query({
  * Computes flags string from build config.
  * Only excludes modules explicitly marked as excluded (config[id] === true).
  */
-export function computeFlagsFromConfig(config: BuildConfigFields): string {
+export function computeFlagsFromConfig(
+  config: Doc<'builds'>['config']
+): string {
   // Sort modules to ensure consistent order
   return Object.keys(config.modulesExcluded)
     .sort()
     .filter((module) => config.modulesExcluded[module])
     .map((moduleExcludedName: string) => `-D${moduleExcludedName}=1`)
     .join(' ')
+}
+
+/**
+ * Encodes a byte array to base62 string.
+ * Uses characters: 0-9, a-z, A-Z (62 characters total)
+ */
+function base62Encode(bytes: Uint8Array): string {
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+  // Convert bytes to a big-endian number
+  let num = BigInt(0)
+  for (let i = 0; i < bytes.length; i++) {
+    num = num * BigInt(256) + BigInt(bytes[i])
+  }
+
+  // Convert number to base62
+  if (num === BigInt(0)) return '0'
+
+  const result: string[] = []
+  while (num > BigInt(0)) {
+    result.push(chars[Number(num % BigInt(62))])
+    num = num / BigInt(62)
+  }
+
+  return result.reverse().join('')
 }
 
 /**
@@ -68,10 +98,10 @@ async function computeBuildHashInternal(
   const encoder = new TextEncoder()
   const data = encoder.encode(input)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+  const hashBytes = new Uint8Array(hashBuffer)
 
-  return hashHex
+  // Encode to base62 instead of hex
+  return base62Encode(hashBytes)
 }
 
 /**
@@ -79,7 +109,7 @@ async function computeBuildHashInternal(
  * This is the single source of truth for build hash computation.
  */
 export async function computeBuildHash(
-  config: BuildConfigFields
+  config: Doc<'builds'>['config']
 ): Promise<{ hash: string; flags: string }> {
   const flags = computeFlagsFromConfig(config)
   const plugins = config.pluginsEnabled ?? []
@@ -94,20 +124,23 @@ export async function computeBuildHash(
 
 /**
  * Constructs the R2 artifact URL from a build.
- * Uses artifactPath if available, otherwise falls back to buildHash.uf2
- * Or custom domain if R2_PUBLIC_URL is set.
+ * Uses {artifactType}-<buildHash>-<githubRunId>.tar.gz format.
  */
 export function getR2ArtifactUrl(
-  build: Pick<BuildFields, 'buildHash' | 'artifactPath'>
+  build: Pick<Doc<'builds'>, 'buildHash' | 'githubRunId'>,
+  artifactType: ArtifactType
 ): string {
   const r2PublicUrl = process.env.R2_PUBLIC_URL
   if (!r2PublicUrl) {
     throw new Error('R2_PUBLIC_URL is not set')
   }
-  const path = build.artifactPath || `/${build.buildHash}.uf2`
-  // Ensure path starts with /
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${r2PublicUrl}${normalizedPath}`
+  if (!build.githubRunId) {
+    throw new Error('githubRunId is required to construct artifact URL')
+  }
+  const artifactTypeStr =
+    artifactType === ArtifactType.Source ? 'source' : 'firmware'
+  const path = `/${artifactTypeStr}-${build.buildHash}-${build.githubRunId}.tar.gz`
+  return `${r2PublicUrl}${path}`
 }
 
 // Internal mutation to upsert a build by buildHash
@@ -136,7 +169,7 @@ export const upsertBuild = internalMutation({
       return existingBuild._id
     }
 
-    // Create new build
+    // Create new build (artifact paths are omitted, will be undefined)
     const buildId = await ctx.db.insert('builds', {
       status: 'queued',
       startedAt: Date.now(),
@@ -170,7 +203,7 @@ export const ensureBuildFromConfig = mutation({
   },
   handler: async (ctx, args) => {
     // Construct config for the build
-    const config: BuildConfigFields = {
+    const config: Doc<'builds'>['config'] = {
       version: args.version,
       modulesExcluded: args.modulesExcluded ?? {},
       target: args.target,
@@ -238,9 +271,9 @@ export const updateBuildStatus = internalMutation({
     ...pick(buildFields, [
       'status',
       'completedAt',
-      'artifactPath',
-      'sourceUrl',
       'githubRunId',
+      'firmwarePath',
+      'sourcePath',
     ]),
     buildId: v.id('builds'),
   },
@@ -249,10 +282,10 @@ export const updateBuildStatus = internalMutation({
     if (!build) return
 
     const updateData: BuildUpdateData & {
-      artifactPath?: string
-      sourceUrl?: string
       githubRunId?: number
       githubRunIdHistory?: number[]
+      firmwarePath?: string
+      sourcePath?: string
     } = {
       status: args.status,
     }
@@ -262,14 +295,20 @@ export const updateBuildStatus = internalMutation({
       updateData.completedAt = Date.now()
     }
 
-    // Set artifactPath if provided
-    if (args.artifactPath !== undefined) {
-      updateData.artifactPath = args.artifactPath
+    // Clear artifact paths when build starts (queued status)
+    if (args.status === 'queued') {
+      updateData.firmwarePath = undefined
+      updateData.sourcePath = undefined
     }
 
-    // Set sourceUrl if provided
-    if (args.sourceUrl !== undefined) {
-      updateData.sourceUrl = args.sourceUrl
+    // Set firmwarePath if provided
+    if (args.firmwarePath !== undefined) {
+      updateData.firmwarePath = args.firmwarePath
+    }
+
+    // Set sourcePath if provided
+    if (args.sourcePath !== undefined) {
+      updateData.sourcePath = args.sourcePath
     }
 
     // Set githubRunId if provided
@@ -281,6 +320,9 @@ export const updateBuildStatus = internalMutation({
       if (existingRunId !== undefined && existingRunId !== args.githubRunId) {
         // Prepend existing run ID to history array, avoiding duplicates
         existingHistory.unshift(existingRunId)
+        // Clear artifact paths when a new run starts
+        updateData.firmwarePath = undefined
+        updateData.sourcePath = undefined
       }
       updateData.githubRunId = args.githubRunId
     }
@@ -293,214 +335,88 @@ export const updateBuildStatus = internalMutation({
   },
 })
 
-/**
- * Helper to generate authenticated download URL
- */
-async function generateAuthenticatedDownloadUrl(
-  ctx: GenericMutationCtx<DataModel>,
-  buildId: Id<'builds'>,
-  profileId: Id<'profiles'>,
-  objectKey: string,
-  ext: string,
-  filenameSuffix: string = '',
-  contentType: string = 'application/octet-stream',
-  incrementFlashCount: boolean = true
-): Promise<string> {
-  const userId = await getAuthUserId(ctx)
-  if (!userId) throw new Error('Unauthorized')
+export const generateDownloadUrl = mutation({
+  args: {
+    buildId: v.id('builds'),
+    artifactType: v.union(v.literal('firmware'), v.literal('source')),
+    profileId: v.optional(v.id('profiles')),
+  },
+  handler: async (ctx, args) => {
+    const build = await ctx.db.get(args.buildId)
+    if (!build) throw new Error('Build not found')
 
-  // Verify profile belongs to user or is public
-  const profile = await ctx.db.get(profileId)
-  if (!profile) throw new Error('Profile not found')
+    if (!build.githubRunId) {
+      throw new Error('Build githubRunId is required for download')
+    }
 
-  // If profile is private, ensure user owns it
-  if (profile.isPublic === false && profile.userId !== userId) {
-    throw new Error('Unauthorized')
-  }
+    const artifactTypeEnum =
+      args.artifactType === 'source'
+        ? ArtifactType.Source
+        : ArtifactType.Firmware
 
-  const build = await ctx.db.get(buildId)
-  if (!build) throw new Error('Build not found')
+    const isSource = artifactTypeEnum === ArtifactType.Source
+    const artifactTypeStr =
+      artifactTypeEnum === ArtifactType.Source ? 'source' : 'firmware'
+    const contentType = isSource
+      ? 'application/gzip'
+      : 'application/octet-stream'
 
-  // Increment flash count for firmware downloads
-  if (incrementFlashCount) {
-    const nextCount = (profile.flashCount ?? 0) + 1
-    await ctx.db.patch(profileId, {
-      flashCount: nextCount,
-      updatedAt: Date.now(),
-    })
+    // Use stored path if available, otherwise construct from buildHash and githubRunId
+    const storedPath = isSource ? build.sourcePath : build.firmwarePath
+    const objectKey = storedPath
+      ? storedPath.startsWith('/')
+        ? storedPath.slice(1)
+        : storedPath
+      : `${artifactTypeStr}-${build.buildHash}-${build.githubRunId}.tar.gz`
 
-    // Increment plugin flash counts if build has plugins enabled
-    if (build.config.pluginsEnabled && build.config.pluginsEnabled.length > 0) {
+    // Fetch profile if profileId is provided
+    const profile = await (async () => {
+      if (!args.profileId) return
+      const profileDoc = await ctx.db.get(args.profileId)
+      if (!profileDoc) throw new Error('Profile not found')
+      return profileDoc
+    })()
+
+    // Slugify profile name for filename (if authenticated)
+    const profileSlug = profile
+      ? profile.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '')
+      : ''
+
+    // Increment profile flash count for firmware downloads
+    if (profile && !isSource) {
+      const nextCount = (profile.flashCount ?? 0) + 1
+      await ctx.db.patch(profile._id, {
+        flashCount: nextCount,
+        updatedAt: Date.now(),
+      })
+    }
+
+    // Increment plugin flash counts for firmware downloads (independent of profile)
+    if (
+      !isSource &&
+      build.config.pluginsEnabled &&
+      build.config.pluginsEnabled.length > 0
+    ) {
       await ctx.runMutation(internal.plugins.incrementFlashCount, {
         slugs: build.config.pluginsEnabled,
       })
     }
-  }
 
-  // Slugify profile name for filename
-  const slug = profile.name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)+/g, '')
+    const last4Hash = build.buildHash.slice(-4)
+    const os = 'meshtastic' // OS/platform identifier
+    const version = build.config.version
+    const target = build.config.target
+    const jobId = build.githubRunId
 
-  const filename = `${slug}-${build.config.target}${filenameSuffix}.${ext}`
+    // Format: {os}-{version}-{profileSlug}-{target}-{last4hash}-{jobId}-{assetType}.tar.gz
+    // If no profile, omit profileSlug and its trailing dash
+    const filename = profileSlug
+      ? `${os}-${version}-${profileSlug}-${target}-${last4Hash}-${jobId}-${artifactTypeStr}.tar.gz`
+      : `${os}-${version}-${target}-${last4Hash}-${jobId}-${artifactTypeStr}.tar.gz`
 
-  return await generateSignedDownloadUrl(objectKey, filename, contentType)
-}
-
-/**
- * Helper to generate anonymous download URL
- */
-function generateAnonymousDownloadUrlHelper(
-  build: BuildFields,
-  slug: string,
-  objectKey: string,
-  ext: string,
-  filenameSuffix: string = '',
-  contentType: string = 'application/octet-stream'
-): Promise<string> {
-  const {
-    buildHash,
-    config: { target, version },
-  } = build
-
-  const pfx = slug ? `${slug}-` : ''
-  const filename = `${pfx}${target}-${version}-${buildHash.substring(0, 4)}${filenameSuffix}.${ext}`
-
-  return generateSignedDownloadUrl(objectKey, filename, contentType)
-}
-
-export const generateDownloadUrl = mutation({
-  args: {
-    buildId: v.id('builds'),
-    profileId: v.id('profiles'),
-  },
-  handler: async (ctx, args) => {
-    const build = await ctx.db.get(args.buildId)
-    if (!build) throw new Error('Build not found')
-
-    // User indicated that artifactPath must be present for a valid download
-    if (!build.artifactPath) {
-      throw new Error('Build artifact path is missing')
-    }
-
-    let objectKey = build.artifactPath
-    // Remove leading slash if present
-    if (objectKey.startsWith('/')) {
-      objectKey = objectKey.substring(1)
-    }
-
-    // Determine extension from objectKey
-    const parts = objectKey.split('.')
-    const ext = parts.length > 1 ? parts.pop() : undefined
-
-    if (!ext) {
-      throw new Error('Could not determine file extension from artifact path')
-    }
-
-    return await generateAuthenticatedDownloadUrl(
-      ctx,
-      args.buildId,
-      args.profileId,
-      objectKey,
-      ext
-    )
-  },
-})
-
-export const generateAnonymousDownloadUrl = mutation({
-  args: {
-    build: v.object(buildFields),
-    slug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Increment plugin flash counts if build has plugins enabled
-    if (
-      args.build.config.pluginsEnabled &&
-      args.build.config.pluginsEnabled.length > 0
-    ) {
-      await ctx.runMutation(internal.plugins.incrementFlashCount, {
-        slugs: args.build.config.pluginsEnabled,
-      })
-    }
-
-    let objectKey = args.build.artifactPath || ''
-    if (objectKey.startsWith('/')) {
-      objectKey = objectKey.substring(1)
-    }
-
-    const parts = objectKey.split('.')
-    const ext = parts.length > 1 ? parts.pop() : undefined
-    if (!ext) {
-      throw new Error('Could not determine file extension from artifact path')
-    }
-
-    return await generateAnonymousDownloadUrlHelper(
-      args.build,
-      args.slug,
-      objectKey,
-      ext
-    )
-  },
-})
-
-export const generateSourceDownloadUrl = mutation({
-  args: {
-    buildId: v.id('builds'),
-    profileId: v.id('profiles'),
-  },
-  handler: async (ctx, args) => {
-    const build = await ctx.db.get(args.buildId)
-    if (!build) throw new Error('Build not found')
-
-    // Use sourceUrl if available, otherwise fall back to constructing from buildHash
-    let objectKey: string
-    if (build.sourceUrl) {
-      // Remove leading slash if present
-      objectKey = build.sourceUrl.startsWith('/')
-        ? build.sourceUrl.substring(1)
-        : build.sourceUrl
-    } else {
-      objectKey = `${build.buildHash}.tar.gz`
-    }
-
-    return await generateAuthenticatedDownloadUrl(
-      ctx,
-      args.buildId,
-      args.profileId,
-      objectKey,
-      'tar.gz',
-      '-source',
-      'application/gzip',
-      false // Don't increment flash count for source downloads
-    )
-  },
-})
-
-export const generateAnonymousSourceDownloadUrl = mutation({
-  args: {
-    build: v.object(buildFields),
-    slug: v.string(),
-  },
-  handler: async (_ctx, args) => {
-    // Use sourceUrl if available, otherwise fall back to constructing from buildHash
-    let objectKey: string
-    if (args.build.sourceUrl) {
-      // Remove leading slash if present
-      objectKey = args.build.sourceUrl.startsWith('/')
-        ? args.build.sourceUrl.substring(1)
-        : args.build.sourceUrl
-    } else {
-      objectKey = `${args.build.buildHash}.tar.gz`
-    }
-
-    return await generateAnonymousDownloadUrlHelper(
-      args.build,
-      args.slug,
-      objectKey,
-      'tar.gz',
-      '-source',
-      'application/gzip'
-    )
+    return await generateSignedDownloadUrl(objectKey, filename, contentType)
   },
 })
