@@ -69,6 +69,28 @@ export function BuildDownloadButton({
       >
         Download {type === ArtifactType.Firmware ? 'firmware' : 'source'}
       </Button>
+      {type === ArtifactType.Firmware && (
+        <p className="text-xs text-slate-400 text-center">
+          Need help flashing?{' '}
+          <a
+            href="https://github.com/MeshEnvy/mesh-forge/discussions/5"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-cyan-400 hover:text-cyan-300 underline"
+          >
+            ESP32
+          </a>
+          {' '}and{' '}
+          <a
+            href="https://github.com/MeshEnvy/mesh-forge/discussions/6"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-cyan-400 hover:text-cyan-300 underline"
+          >
+            nRF52
+          </a>
+        </p>
+      )}
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   )
