@@ -201,7 +201,7 @@ jobs:
           path: |
             ~/.platformio
             firmware/.pio/libdeps
-          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/platformio.ini') }}
+          key: ${{ runner.os }}-pio-${{ inputs.version }}
           restore-keys: |
             ${{ runner.os }}-pio-
 
