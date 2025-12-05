@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { DiscordButton } from '@/components/DiscordButton'
+import { RedditButton } from '@/components/RedditButton'
 
 function QuickBuildIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -50,6 +51,11 @@ export default function LandingPage() {
               size="lg"
               variant="default"
               className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 shadow-lg shadow-purple-500/50"
+            />
+            <RedditButton
+              size="lg"
+              variant="default"
+              className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white border-0 shadow-lg shadow-orange-500/50"
             />
           </div>
 
