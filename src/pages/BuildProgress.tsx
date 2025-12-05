@@ -244,12 +244,6 @@ export default function BuildProgress() {
     }
   )
 
-  // Resolve dependencies to get all plugins that should be enabled
-  const allResolvedPlugins = getDependedPlugins(
-    explicitPluginSlugs,
-    registryData as Record<string, { dependencies?: Record<string, string> }>
-  )
-
   // Get implicit dependencies (dependencies that are not explicitly selected)
   const implicitDeps = getImplicitDependencies(
     explicitPluginSlugs,
