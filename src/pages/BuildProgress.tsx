@@ -12,11 +12,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { BuildDownloadButton } from '@/components/BuildDownloadButton'
 import { Button } from '@/components/ui/button'
-import {
-  getDependedPlugins,
-  getImplicitDependencies,
-  humanizeStatus,
-} from '@/lib/utils'
+import { getImplicitDependencies, humanizeStatus } from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
 import { ArtifactType } from '../../convex/builds'
 import modulesData from '../../convex/modules.json'
