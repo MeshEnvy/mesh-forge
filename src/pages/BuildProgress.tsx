@@ -127,8 +127,8 @@ export default function BuildProgress() {
       .join(' ')
   }
 
-  // Generate GitHub issue URL with prefilled body
-  const generateIssueUrl = (): string => {
+  // Generate GitHub discussion URL with prefilled body
+  const generateDiscussionUrl = (): string => {
     const flags = computeFlagsFromConfig(build.config)
     const plugins = build.config.pluginsEnabled?.join(', ') || '(none)'
     const timestamp = new Date(build.startedAt).toISOString()
@@ -137,9 +137,23 @@ export default function BuildProgress() {
       : '(not available)'
     const buildPageUrl = `${window.location.origin}/builds/${build.buildHash}`
 
-    const issueTitle = `Build ${build.status === 'failure' ? 'Failed' : 'Issue'}: ${targetLabel} (${build.buildHash.substring(0, 8)})`
+    // Format plugins as +plugin@version
+    const formattedPlugins = build.config.pluginsEnabled
+      ?.map((plugin) => {
+        // Plugin might be "slug@version" or just "slug"
+        return plugin.includes('@') ? `+${plugin}` : `+${plugin}`
+      })
+      .join(' ') || ''
 
-    const issueBody = `## Build ${build.status === 'failure' ? 'Failed' : 'Information'}
+    const bracketContent = [
+      build.config.target,
+      `v${build.config.version}`,
+      ...(formattedPlugins ? [formattedPlugins] : []),
+    ].join(' ')
+
+    const discussionTitle = `Build ${build.status === 'failure' ? 'Failed' : 'Issue'}: ${targetLabel} [${bracketContent}]`
+
+    const discussionBody = `## Build ${build.status === 'failure' ? 'Failed' : 'Information'}
 
 **Build Hash**: \`${build.buildHash}\`
 **Target Board**: ${build.config.target}
@@ -154,17 +168,18 @@ export default function BuildProgress() {
 ## Additional Information
 (Please add any additional details about the issue here)`
 
-    const baseUrl = 'https://github.com/MeshEnvy/mesh-forge/issues/new'
+    const baseUrl = 'https://github.com/MeshEnvy/mesh-forge/discussions/new'
     const params = new URLSearchParams({
-      title: issueTitle,
-      body: issueBody,
+      category: 'q-a',
+      title: discussionTitle,
+      body: discussionBody,
     })
 
     return `${baseUrl}?${params.toString()}`
   }
 
   const handleReportIssue = () => {
-    window.open(generateIssueUrl(), '_blank', 'noopener,noreferrer')
+    window.open(generateDiscussionUrl(), '_blank', 'noopener,noreferrer')
   }
 
   const handleRetry = async () => {
@@ -280,7 +295,7 @@ export default function BuildProgress() {
                 className="border-slate-600 hover:bg-slate-800"
               >
                 <AlertCircle className="w-4 h-4 mr-2" />
-                Report an Issue
+                Report a Problem
               </Button>
               <Button
                 onClick={handleShare}
