@@ -12,7 +12,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { BuildDownloadButton } from '@/components/BuildDownloadButton'
 import { Button } from '@/components/ui/button'
-import { humanizeStatus } from '@/lib/utils'
+import {
+  getDependedPlugins,
+  getImplicitDependencies,
+  humanizeStatus,
+} from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
 import { ArtifactType } from '../../convex/builds'
 import modulesData from '../../convex/modules.json'
@@ -231,18 +235,75 @@ export default function BuildProgress() {
     (module) => build.config.modulesExcluded[module.id] === true
   )
 
-  // Get enabled plugins
-  const enabledPlugins = (build.config.pluginsEnabled || []).map((pluginId) => {
+  // Get explicitly selected plugins from stored config
+  // The stored config only contains explicitly selected plugins (not resolved dependencies)
+  const explicitPluginSlugs = (build.config.pluginsEnabled || []).map(
+    (pluginId) => {
+      // Extract slug from "slug@version" format if present
+      return pluginId.includes('@') ? pluginId.split('@')[0] : pluginId
+    }
+  )
+
+  // Resolve dependencies to get all plugins that should be enabled
+  const allResolvedPlugins = getDependedPlugins(
+    explicitPluginSlugs,
+    registryData as Record<string, { dependencies?: Record<string, string> }>
+  )
+
+  // Get implicit dependencies (dependencies that are not explicitly selected)
+  const implicitDeps = getImplicitDependencies(
+    explicitPluginSlugs,
+    registryData as Record<string, { dependencies?: Record<string, string> }>
+  )
+
+  // Separate explicit and implicit plugins
+  const explicitPlugins: Array<{
+    id: string
+    name: string
+    description: string
+    version: string
+  }> = []
+  const implicitPlugins: Array<{
+    id: string
+    name: string
+    description: string
+    version: string
+  }> = []
+
+  // Process explicitly selected plugins
+  ;(build.config.pluginsEnabled || []).forEach((pluginId) => {
     // Extract slug from "slug@version" format if present
     const slug = pluginId.includes('@') ? pluginId.split('@')[0] : pluginId
-    const pluginData = (registryData as Record<string, { name: string; description: string; version: string }>)[slug]
-    return {
+    const pluginData = (registryData as Record<
+      string,
+      { name: string; description: string; version: string }
+    >)[slug]
+    const pluginInfo = {
       id: slug,
       name: pluginData?.name || slug,
       description: pluginData?.description || '',
-      version: pluginId.includes('@') ? pluginId.split('@')[1] : pluginData?.version || '',
+      version: pluginId.includes('@')
+        ? pluginId.split('@')[1]
+        : pluginData?.version || '',
     }
+    explicitPlugins.push(pluginInfo)
   })
+
+  // Process implicit dependencies (resolved but not in stored config)
+  for (const slug of implicitDeps) {
+    const pluginData = (registryData as Record<
+      string,
+      { name: string; description: string; version: string }
+    >)[slug]
+    if (pluginData) {
+      implicitPlugins.push({
+        id: slug,
+        name: pluginData.name || slug,
+        description: pluginData.description || '',
+        version: pluginData.version || '',
+      })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8">
@@ -420,7 +481,9 @@ export default function BuildProgress() {
           )}
 
           {/* Build Configuration Summary */}
-          {(excludedModules.length > 0 || enabledPlugins.length > 0) && (
+          {(excludedModules.length > 0 ||
+            explicitPlugins.length > 0 ||
+            implicitPlugins.length > 0) && (
             <div className="space-y-6 border-t border-slate-800 pt-6">
               {/* Excluded Modules */}
               {excludedModules.length > 0 && (
@@ -447,12 +510,45 @@ export default function BuildProgress() {
               )}
 
               {/* Enabled Plugins */}
-              {enabledPlugins.length > 0 && (
+              {explicitPlugins.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Enabled Plugins</h3>
                   <div className="bg-slate-900/50 rounded-lg border border-slate-800 p-6">
                     <div className="space-y-4">
-                      {enabledPlugins.map((plugin) => (
+                      {explicitPlugins.map((plugin) => (
+                        <div
+                          key={plugin.id}
+                          className="border-b border-slate-800 pb-4 last:border-b-0 last:pb-0"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-base font-medium">
+                              {plugin.name}
+                            </h4>
+                            {plugin.version && (
+                              <span className="text-xs text-slate-500">
+                                v{plugin.version}
+                              </span>
+                            )}
+                          </div>
+                          {plugin.description && (
+                            <p className="text-slate-400 text-sm">
+                              {plugin.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Required Plugins (Implicit Dependencies) */}
+              {implicitPlugins.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Required Plugins</h3>
+                  <div className="bg-slate-900/50 rounded-lg border border-slate-800 p-6">
+                    <div className="space-y-4">
+                      {implicitPlugins.map((plugin) => (
                         <div
                           key={plugin.id}
                           className="border-b border-slate-800 pb-4 last:border-b-0 last:pb-0"

@@ -6,6 +6,11 @@ import { toast } from 'sonner'
 import { ModuleToggle } from '@/components/ModuleToggle'
 import { PluginToggle } from '@/components/PluginToggle'
 import { Button } from '@/components/ui/button'
+import {
+  getDependedPlugins,
+  getImplicitDependencies,
+  isRequiredByOther,
+} from '@/lib/utils'
 import { api } from '../../convex/_generated/api'
 import modulesData from '../../convex/modules.json'
 import registryData from '../../registry/registry.json'
@@ -164,12 +169,33 @@ export default function BuildNew() {
     }
 
     // Set plugin config (convert array to object format)
+    // Only add explicitly selected plugins, not implicit dependencies
     if (config.pluginsEnabled && config.pluginsEnabled.length > 0) {
+      const allPluginSlugs = config.pluginsEnabled.map((pluginId) => {
+        return pluginId.includes('@') ? pluginId.split('@')[0] : pluginId
+      })
+
+      // Determine which plugins are required by others (implicit dependencies)
+      const requiredByOthers = new Set<string>()
+      for (const pluginSlug of allPluginSlugs) {
+        if (
+          isRequiredByOther(
+            pluginSlug,
+            allPluginSlugs,
+            registryData as Record<
+              string,
+              { dependencies?: Record<string, string> }
+            >
+          )
+        ) {
+          requiredByOthers.add(pluginSlug)
+        }
+      }
+
+      // Only add plugins that are NOT required by others (explicitly selected)
       const pluginObj: Record<string, boolean> = {}
-      config.pluginsEnabled.forEach((pluginId) => {
-        // Extract slug from "slug@version" format if present
-        const slug = pluginId.includes('@') ? pluginId.split('@')[0] : pluginId
-        if (slug in registryData) {
+      allPluginSlugs.forEach((slug) => {
+        if (slug in registryData && !requiredByOthers.has(slug)) {
           pluginObj[slug] = true
         }
       })
@@ -198,12 +224,85 @@ export default function BuildNew() {
   }
 
   const handleTogglePlugin = (id: string, enabled: boolean) => {
+    // Get current explicit selections
+    const explicitPlugins = Object.keys(pluginConfig).filter(
+      (pluginId) => pluginConfig[pluginId] === true
+    )
+    
+    // Check if this plugin is currently an implicit dependency
+    const implicitDeps = getImplicitDependencies(
+      explicitPlugins,
+      registryData as Record<
+        string,
+        { dependencies?: Record<string, string> }
+      >
+    )
+    
+    // Check if this plugin is required by another explicitly selected plugin
+    const isRequired = isRequiredByOther(
+      id,
+      explicitPlugins,
+      registryData as Record<
+        string,
+        { dependencies?: Record<string, string> }
+      >
+    )
+    
+    // Don't allow toggling implicit dependencies at all
+    // (they should be disabled in the UI, but add this as a safeguard)
+    if (implicitDeps.has(id)) {
+      return // Can't toggle implicit dependencies
+    }
+    
+    // Don't allow disabling if it's required by another explicitly selected plugin
+    if (!enabled && isRequired) {
+      return // Can't disable required plugins
+    }
+    
     setPluginConfig((prev) => {
       const next = { ...prev }
       if (enabled) {
+        // Enabling: add to explicit selection (even if it was implicit)
         next[id] = true
       } else {
+        // Disabling: remove from explicit selection
         delete next[id]
+        
+        // Recompute what plugins are still needed after removal
+        const remainingExplicit = Object.keys(next).filter(
+          (pluginId) => next[pluginId] === true
+        )
+        const allStillNeeded = getDependedPlugins(
+          remainingExplicit,
+          registryData as Record<
+            string,
+            { dependencies?: Record<string, string> }
+          >
+        )
+        
+        // Remove any plugins from config that are no longer needed
+        // BUT preserve all plugins that are currently explicitly selected (in remainingExplicit)
+        // This ensures that plugins that were explicitly selected remain explicitly selected
+        // even if they temporarily became implicit and then un-implicit
+        for (const pluginId of Object.keys(next)) {
+          if (
+            next[pluginId] === true &&
+            !allStillNeeded.includes(pluginId) &&
+            !remainingExplicit.includes(pluginId)
+          ) {
+            // This plugin is no longer needed and is not in the remaining explicit list
+            // Only remove if it's truly not needed and wasn't explicitly selected
+            // Note: If a plugin is in `next` with value `true`, it should be in `remainingExplicit`
+            // So this condition should rarely be true, but we keep it as a safety check
+            delete next[pluginId]
+          }
+        }
+        
+        // Ensure all remaining explicitly selected plugins stay in config
+        // (they should already be there, but this ensures they remain even if they're not needed)
+        for (const pluginId of remainingExplicit) {
+          next[pluginId] = true
+        }
       }
       return next
     })
@@ -217,7 +316,21 @@ export default function BuildNew() {
       const enabledSlugs = Object.keys(pluginConfig).filter(
         (id) => pluginConfig[id] === true
       )
-      const pluginsEnabled = enabledSlugs.map((slug) => {
+      
+      // Double-check: filter out any implicit dependencies that might have snuck in
+      // This ensures we only send explicitly selected plugins to the backend
+      const implicitDeps = getImplicitDependencies(
+        enabledSlugs,
+        registryData as Record<
+          string,
+          { dependencies?: Record<string, string> }
+        >
+      )
+      const explicitOnlySlugs = enabledSlugs.filter(
+        (slug) => !implicitDeps.has(slug)
+      )
+      
+      const pluginsEnabled = explicitOnlySlugs.map((slug) => {
         const plugin = (registryData as Record<string, { version: string }>)[
           slug
         ]
@@ -442,33 +555,77 @@ export default function BuildNew() {
                   </button>
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
-                  {Object.entries(registryData)
-                    .sort(([, pluginA], [, pluginB]) => {
-                      // Featured plugins first
-                      const featuredA = pluginA.featured ?? false
-                      const featuredB = pluginB.featured ?? false
-                      if (featuredA !== featuredB) {
-                        return featuredA ? -1 : 1
-                      }
-                      // Then alphabetical by name
-                      return pluginA.name.localeCompare(pluginB.name)
-                    })
-                    .map(([slug, plugin]) => (
-                      <PluginToggle
-                        key={slug}
-                        id={slug}
-                        name={plugin.name}
-                        description={plugin.description}
-                        isEnabled={pluginConfig[slug] === true}
-                        onToggle={(enabled) =>
-                          handleTogglePlugin(slug, enabled)
+                  {(() => {
+                    // Get explicitly selected plugins (user-selected)
+                    const explicitPlugins = Object.keys(pluginConfig).filter(
+                      (id) => pluginConfig[id] === true
+                    )
+                    
+                    // Compute implicit dependencies (dependencies that are not explicitly selected)
+                    const implicitDeps = getImplicitDependencies(
+                      explicitPlugins,
+                      registryData as Record<
+                        string,
+                        { dependencies?: Record<string, string> }
+                      >
+                    )
+                    
+                    // Compute all enabled plugins (explicit + implicit)
+                    const allEnabledPlugins = getDependedPlugins(
+                      explicitPlugins,
+                      registryData as Record<
+                        string,
+                        { dependencies?: Record<string, string> }
+                      >
+                    )
+
+                    return Object.entries(registryData)
+                      .sort(([, pluginA], [, pluginB]) => {
+                        // Featured plugins first
+                        const featuredA = pluginA.featured ?? false
+                        const featuredB = pluginB.featured ?? false
+                        if (featuredA !== featuredB) {
+                          return featuredA ? -1 : 1
                         }
-                        featured={plugin.featured ?? false}
-                        flashCount={pluginFlashCounts[slug] ?? 0}
-                        homepage={plugin.homepage}
-                        version={plugin.version}
-                      />
-                    ))}
+                        // Then alphabetical by name
+                        return pluginA.name.localeCompare(pluginB.name)
+                      })
+                      .map(([slug, plugin]) => {
+                        // Check if plugin is required by another explicitly selected plugin
+                        const isRequired = isRequiredByOther(
+                          slug,
+                          explicitPlugins,
+                          registryData as Record<
+                            string,
+                            { dependencies?: Record<string, string> }
+                          >
+                        )
+                        // Plugin is implicit if it's either:
+                        // 1. Not explicitly selected but is a dependency, OR
+                        // 2. Explicitly selected but required by another explicitly selected plugin
+                        const isImplicit =
+                          implicitDeps.has(slug) ||
+                          (explicitPlugins.includes(slug) && isRequired)
+                        return (
+                          <PluginToggle
+                            key={slug}
+                            id={slug}
+                            name={plugin.name}
+                            description={plugin.description}
+                            isEnabled={allEnabledPlugins.includes(slug)}
+                            onToggle={(enabled) =>
+                              handleTogglePlugin(slug, enabled)
+                            }
+                            disabled={isImplicit}
+                            enabledLabel={isImplicit ? 'Required' : 'Add'}
+                            featured={plugin.featured ?? false}
+                            flashCount={pluginFlashCounts[slug] ?? 0}
+                            homepage={plugin.homepage}
+                            version={plugin.version}
+                          />
+                        )
+                      })
+                  })()}
                 </div>
               </div>
             )}

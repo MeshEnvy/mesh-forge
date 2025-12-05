@@ -11,6 +11,8 @@ interface PluginToggleProps {
   flashCount?: number
   homepage?: string
   version?: string
+  disabled?: boolean
+  enabledLabel?: string
 }
 
 export function PluginToggle({
@@ -22,6 +24,8 @@ export function PluginToggle({
   flashCount = 0,
   homepage,
   version,
+  disabled = false,
+  enabledLabel = 'Add',
 }: PluginToggleProps) {
   return (
     <div className="relative flex items-start gap-4 p-4 rounded-lg border-2 border-slate-700 bg-slate-900/50 hover:border-slate-600 transition-colors">
@@ -68,8 +72,9 @@ export function PluginToggle({
         <Switch
           checked={isEnabled}
           onCheckedChange={onToggle}
+          disabled={disabled}
           labelLeft="Skip"
-          labelRight="Add"
+          labelRight={enabledLabel}
           className={isEnabled ? 'bg-green-600' : 'bg-slate-600'}
         />
       </div>
