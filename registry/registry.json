@@ -17,9 +17,11 @@
     "description": "BBS for Meshtastic right on the firmware - A full bulletin board system that runs entirely inside the Meshtastic firmware",
     "repo": "https://github.com/MeshEnvy/lobbs",
     "homepage": "https://github.com/MeshEnvy/lobbs",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "featured": true,
-    "includes": ["esp32"],
+    "includes": [
+      "esp32"
+    ],
     "dependencies": {
       "lodb": ">=1.0.0",
       "meshtastic": ">=2.7.0"
