@@ -28,7 +28,7 @@ export const getByHash = query({
   handler: async (ctx, args) => {
     const build = await ctx.db
       .query("builds")
-      .filter(q => q.eq(q.field("buildHash"), args.buildHash))
+      .withIndex("by_buildHash", q => q.eq("buildHash", args.buildHash))
       .unique()
     return build ?? null
   },
@@ -146,7 +146,7 @@ export const upsertBuild = internalMutation({
     // Check if build already exists with this hash
     const existingBuild = await ctx.db
       .query("builds")
-      .filter(q => q.eq(q.field("buildHash"), args.buildHash))
+      .withIndex("by_buildHash", q => q.eq("buildHash", args.buildHash))
       .unique()
 
     const { status, buildHash, config, flags } = args
@@ -205,7 +205,7 @@ export const ensureBuildFromConfig = mutation({
 
     const existingBuild = await ctx.db
       .query("builds")
-      .filter(q => q.eq(q.field("buildHash"), buildHash))
+      .withIndex("by_buildHash", q => q.eq("buildHash", buildHash))
       .unique()
 
     if (existingBuild) {

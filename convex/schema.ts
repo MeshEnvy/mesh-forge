@@ -49,8 +49,8 @@ export const userSettingsFields = {
 
 export const schema = defineSchema({
   ...authTables,
-  profiles: defineTable(profileFields),
-  builds: defineTable(buildFields),
+  profiles: defineTable(profileFields).index("by_userId", ["userId"]).index("by_isPublic", ["isPublic"]),
+  builds: defineTable(buildFields).index("by_buildHash", ["buildHash"]).index("by_status", ["status"]),
   plugins: defineTable(pluginFields).index("by_slug", ["slug"]),
   userSettings: defineTable(userSettingsFields).index("by_user", ["userId"]),
 })

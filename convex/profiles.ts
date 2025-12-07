@@ -11,7 +11,7 @@ export const list = query({
 
     return await ctx.db
       .query("profiles")
-      .filter(q => q.eq(q.field("userId"), userId))
+      .withIndex("by_userId", q => q.eq("userId", userId))
       .collect()
   },
 })
@@ -21,7 +21,7 @@ export const listPublic = query({
   handler: async ctx => {
     const allProfiles = await ctx.db
       .query("profiles")
-      .filter(q => q.eq(q.field("isPublic"), true))
+      .withIndex("by_isPublic", q => q.eq("isPublic", true))
       .collect()
     return allProfiles.sort((a, b) => (b.flashCount ?? 0) - (a.flashCount ?? 0))
   },

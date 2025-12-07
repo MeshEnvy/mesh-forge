@@ -25,7 +25,7 @@ export const listFailedBuilds = adminQuery({
   handler: async ctx => {
     const failedBuilds = await ctx.db
       .query("builds")
-      .filter(q => q.eq(q.field("status"), "failure"))
+      .withIndex("by_status", q => q.eq("status", "failure"))
       .order("desc")
       .collect()
 
