@@ -1,11 +1,11 @@
 import { SourceAvailable } from "@/components/SourceAvailable"
 import { Button } from "@/components/ui/button"
+import { api } from "@/convex/_generated/api"
+import type { Doc } from "@/convex/_generated/dataModel"
+import { ArtifactType } from "@/convex/builds"
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { api } from "../convex/_generated/api"
-import type { Doc } from "../convex/_generated/dataModel"
-import { ArtifactType } from "../convex/builds"
 
 interface BuildDownloadButtonProps {
   build: Doc<"builds">

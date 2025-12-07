@@ -1,6 +1,8 @@
 import { DiscordButton } from "@/components/DiscordButton"
+import { PluginCard } from "@/components/PluginCard"
 import { RedditButton } from "@/components/RedditButton"
 import { Button } from "@/components/ui/button"
+import registryData from "@/public/registry.json"
 import { navigate } from "vike/client/router"
 
 function QuickBuildIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -11,10 +13,10 @@ function QuickBuildIcon(props: React.SVGProps<SVGSVGElement>) {
       height="24"
       viewBox="0 0 24 24"
       role="img"
-      aria-label="Quick build"
+      aria-label="Custom build"
       {...props}
     >
-      <title>Quick build</title>
+      <title>Custom build</title>
       <path fill="currentColor" d="M11 15H6l7-14v8h5l-7 14z" />
     </svg>
   )
@@ -41,6 +43,18 @@ function DocsIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export default function LandingPage() {
+  const featuredPlugins = Object.entries(registryData)
+    .filter(([, plugin]) => plugin.featured === true)
+    .sort(([, pluginA], [, pluginB]) => pluginA.name.localeCompare(pluginB.name))
+
+  const customBuildPlugin = {
+    id: "custom-build",
+    name: "Build your own",
+    description: "Create a custom firmware build with your choice of plugins and modules",
+    imageUrl: "/custom-build.webp",
+    featured: false,
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="max-w-7xl mx-auto">
@@ -55,16 +69,46 @@ export default function LandingPage() {
             growing to hundreds of plugins.
           </p>
 
+          {featuredPlugins.length > 0 && (
+            <div className="mb-10">
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 pb-24 md:pb-8 max-w-6xl mx-auto relative">
+                <h2 className="text-2xl font-bold mb-6 text-center">Popular Builds</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(260px,260px))] gap-4 auto-rows-fr justify-center">
+                  {featuredPlugins.map(([slug, plugin]) => (
+                    <div key={slug} className="h-full">
+                      <PluginCard
+                        variant="link"
+                        id={slug}
+                        name={plugin.name}
+                        description={plugin.description}
+                        imageUrl={plugin.imageUrl}
+                        featured={false}
+                        repo={plugin.repo}
+                        homepage={plugin.homepage}
+                        version={plugin.version}
+                        downloads={plugin.downloads}
+                        stars={plugin.stars}
+                      />
+                    </div>
+                  ))}
+                  <div className="h-full">
+                    <PluginCard
+                      variant="link"
+                      id={customBuildPlugin.id}
+                      name={customBuildPlugin.name}
+                      description={customBuildPlugin.description}
+                      imageUrl={customBuildPlugin.imageUrl}
+                      featured={false}
+                      href="/builds/new"
+                      prominent={true}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col items-center gap-4 mb-10">
-            <Button
-              onClick={() => navigate("/builds/new")}
-              size="lg"
-              variant="outline"
-              className="border-cyan-500/50 text-white hover:bg-slate-900/60 text-lg px-8 py-6"
-            >
-              <QuickBuildIcon className="mr-2 h-6 w-6" />
-              Quick Build
-            </Button>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Button
                 onClick={() => navigate("/docs")}

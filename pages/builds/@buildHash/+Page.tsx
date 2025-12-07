@@ -1,17 +1,17 @@
 import { BuildDownloadButton } from "@/components/BuildDownloadButton"
 import { Button } from "@/components/ui/button"
+import { TARGETS } from "@/constants/targets"
+import { api } from "@/convex/_generated/api"
+import { ArtifactType } from "@/convex/builds"
+import modulesData from "@/convex/modules.json"
 import { getImplicitDependencies, humanizeStatus } from "@/lib/utils"
+import registryData from "@/public/registry.json"
 import { useMutation, useQuery } from "convex/react"
 import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Share2, XCircle } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { usePageContext } from "vike-react/usePageContext"
 import { navigate } from "vike/client/router"
-import { TARGETS } from "../../../constants/targets"
-import { api } from "../../../convex/_generated/api"
-import { ArtifactType } from "../../../convex/builds"
-import modulesData from "../../../convex/modules.json"
-import registryData from "../../../public/registry.json"
 
 export default function BuildProgress() {
   const pageContext = usePageContext()

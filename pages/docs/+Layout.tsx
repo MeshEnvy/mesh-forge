@@ -1,5 +1,5 @@
+import { Link } from "@/components/Link"
 import { usePageContext } from "vike-react/usePageContext"
-import { Link } from "../../components/Link"
 
 const navSections = [
   {

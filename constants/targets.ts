@@ -1,4 +1,4 @@
-import hardwareList from "../vendor/web-flasher/public/data/hardware-list.json"
+import hardwareList from "@/vendor/web-flasher/public/data/hardware-list.json"
 
 export interface TargetMetadata {
   name: string

@@ -1,10 +1,10 @@
+import favicon from "@/assets/favicon-96x96.png"
 import { DiscordButton } from "@/components/DiscordButton"
 import { RedditButton } from "@/components/RedditButton"
 import { Button } from "@/components/ui/button"
+import { api } from "@/convex/_generated/api"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { Authenticated, Unauthenticated, useQuery } from "convex/react"
-import favicon from "../assets/favicon-96x96.png"
-import { api } from "../convex/_generated/api"
 
 export default function Navbar() {
   const { signOut, signIn } = useAuthActions()
@@ -24,6 +24,9 @@ export default function Navbar() {
             <div className="flex items-center gap-4">
               <a href="/docs" className="text-slate-300 hover:text-white transition-colors">
                 Docs
+              </a>
+              <a href="/plugins" className="text-slate-300 hover:text-white transition-colors">
+                Plugins
               </a>
               <Authenticated>
                 {isAdmin && (

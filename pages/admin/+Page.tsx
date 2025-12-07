@@ -1,12 +1,12 @@
 import { BuildDownloadButton } from "@/components/BuildDownloadButton"
 import { Button } from "@/components/ui/button"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
+import { ArtifactType } from "@/convex/builds"
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { navigate } from "vike/client/router"
-import { api } from "../../convex/_generated/api"
-import type { Id } from "../../convex/_generated/dataModel"
-import { ArtifactType } from "../../convex/builds"
 
 type FilterType = "all" | "failed"
 

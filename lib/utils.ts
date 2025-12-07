@@ -1,6 +1,6 @@
+import PARENT_MAP from "@/constants/architecture-hierarchy.json"
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import PARENT_MAP from "../constants/architecture-hierarchy.json"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -291,4 +291,46 @@ export function isPluginCompatibleWithArchitecture(
 ): boolean {
   // Legacy support: treat architectures array as includes
   return isPluginCompatibleWithTarget(pluginArchitectures, undefined, targetArchitecture)
+}
+
+/**
+ * Get all targets that inherit from (are descendants of) the given architectures
+ * Traces backwards through the hierarchy to find all targets/variants that inherit from the includes
+ * Returns normalized target IDs that can be matched against TARGETS keys
+ */
+export function getTargetsCompatibleWithIncludes(includes: string[]): Set<string> {
+  const parentMap = PARENT_MAP as Record<string, string | null>
+  const compatibleTargets = new Set<string>()
+
+  // Normalize includes
+  const normalizedIncludes = new Set(includes.map(include => normalizeArchitecture(include)))
+
+  // For each target in the parent map, check if it or any of its ancestors match the includes
+  for (const target of Object.keys(parentMap)) {
+    const normalizedTarget = normalizeArchitecture(target)
+    const visited = new Set<string>()
+    let current: string | null = normalizedTarget
+
+    // Trace up the parent chain
+    while (current && !visited.has(current)) {
+      visited.add(current)
+
+      // Check if current matches any of the includes
+      if (normalizedIncludes.has(current)) {
+        // Add both the normalized version and the original (for matching against TARGETS)
+        compatibleTargets.add(normalizedTarget)
+        compatibleTargets.add(target)
+        break
+      }
+
+      // Move to parent
+      const parentValue = parentMap[current]
+      if (parentValue === null || parentValue === undefined) {
+        break
+      }
+      current = normalizeArchitecture(parentValue)
+    }
+  }
+
+  return compatibleTargets
 }
