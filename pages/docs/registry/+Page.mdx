@@ -1,0 +1,57 @@
+# Mesh Plugin Registry
+
+The Mesh Plugin Registry is a collection of community-developed plugins that extend Meshtastic firmware functionality. This guide explains how to discover, use, and build firmware with plugins from the registry.
+
+## What is the Registry?
+
+The registry contains plugins that add new features and capabilities to Meshtastic devices. Each plugin is maintained by the community and can be easily integrated into custom firmware builds.
+
+## How to Use Plugins
+
+### Using Mesh Forge (Recommended)
+
+The easiest way to use plugins is through [Mesh Forge](https://meshforge.org/builds/new), which lets you build custom firmware with plugins directly in your browser:
+
+1. Visit [meshforge.org/builds/new](https://meshforge.org/builds/new)
+2. Browse available plugins from the registry
+3. Select the plugins you want to include
+4. Build your custom firmware
+5. Download and flash the firmware to your device
+
+**Benefits:**
+
+- Zero installation required
+- Simple web interface
+- Automatic dependency resolution
+- Ready-to-flash firmware files
+
+### Using Mesh Plugin Manager (Advanced)
+
+For local development and more control, you can use the [Mesh Plugin Manager](https://pypi.org/project/mesh-plugin-manager/) command-line tool:
+
+1. Install Mesh Plugin Manager: `pip install mesh-plugin-manager`
+2. Set up PlatformIO and Poetry (required dependencies)
+3. Use the CLI to build firmware with selected plugins
+4. Flash the firmware to your device
+
+**Benefits:**
+
+- Full control over the build process
+- Local development workflow
+- CLI interface for automation
+- Developer-friendly
+
+## Creating Your Own Plugin
+
+If you want to create and contribute plugins to the registry, check out the [Plugin Development Guide](https://github.com/MeshEnvy/firmware/blob/meshenvy/module-registry/plugins/README.md) for documentation on:
+
+- Plugin structure and architecture
+- Protobuf message generation
+- Module registration
+- Testing and submission guidelines
+
+## Additional Resources
+
+- [MeshEnvy](https://meshenvy.org) - Built by MeshEnvy (not affiliated with Meshtastic)
+- [Meshtastic](https://meshtastic.org) - Learn more about Meshtastic
+

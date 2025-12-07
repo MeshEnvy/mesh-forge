@@ -1,0 +1,66 @@
+# ESP Device Flashing Guide
+
+## Overview
+
+This guide will walk you through flashing custom firmware to your ESP device using the firmware files downloaded from MeshForge.
+
+## Prerequisites
+
+- Custom firmware built and downloaded from MeshForge
+- ESP device (ESP32, ESP8266, etc.)
+- USB cable to connect your device to your computer
+
+## Step-by-Step Instructions
+
+### 1. Build and Download Firmware
+
+1. Build your custom firmware for your device on [meshforge.org](https://meshforge.org/)
+2. When the build completes, download the compressed firmware archive
+
+### 2. Extract Firmware Files
+
+Extract the downloaded archive to a folder. You should see the following files:
+
+- `firmware.bin` - Main application binary
+- `firmware.factory.bin` - Factory application binary
+- `firmware.elf` - ELF debug file (not needed for flashing)
+- `partitions.bin` - Partition table binary
+- `bootloader.bin` - Bootloader binary
+
+### 3. Flash Using ESPTool
+
+1. Open [ESP Tool Web Flasher](https://esptool.spacehuhn.com/) in your browser
+2. Connect your ESP device to your computer via USB
+3. Select the appropriate COM port (or device) when prompted
+4. Configure the flash settings using the following memory offsets:
+
+#### Memory Offsets
+
+| Offset    | File                   | Description                                                           |
+| --------- | ---------------------- | --------------------------------------------------------------------- |
+| `0x1000`  | `bootloader.bin`       | Second-stage bootloader binary                                        |
+| `0x8000`  | `partitions.bin`       | Partition table that defines data and application partition locations |
+| `0x10000` | `firmware.factory.bin` | Main application (factory) binary                                     |
+| `0xe000`  | `boot_app0.bin`        | Boot application file (if included in your firmware package)          |
+
+**Note:** Some configurations may include additional data partitions like NVS (Non-Volatile Storage) or Wi-Fi calibration data at their defined offsets. Only flash files that are present in your extracted firmware folder.
+
+### 4. Complete the Flash Process
+
+1. Click the flash/upload button in ESP Tool
+2. Wait for the flashing process to complete
+3. You should see a success message when finished
+
+### 5. Reboot Your Device
+
+1. Disconnect and reconnect your ESP device, or
+2. Press the reset button on your device, or
+3. Use the reset command in ESP Tool if available
+
+Your device should now be running the custom firmware!
+
+## Troubleshooting
+
+- **Device not detected:** Make sure you have the correct USB drivers installed for your ESP device
+- **Flash failed:** Verify that you're using the correct memory offsets for your device model
+- **Device won't boot:** Ensure all required files (bootloader, partitions, and firmware) were flashed successfully

@@ -1,0 +1,31 @@
+# Mesh Forge
+
+Mesh Forge is a cloud-based firmware builder that gives you complete control over your Meshtastic node. Choose exactly which modules you want, include third-party plugins, and build your custom firmware in the cloud—no local environment setup required.
+
+## What is Mesh Forge?
+
+Mesh Forge removes the hours of painful setup (installing Python, PlatformIO, toolchains, and debugging paths) and guarantees a successful, reproducible build instantly. Simply configure your firmware, click build, and download a ready-to-flash binary—along with the complete source code used to create it.
+
+**Key Features:**
+
+- ✅ **No Installation Required** - Build firmware directly in your browser
+- ✅ **Complete Control** - Choose exactly which modules and plugins to include
+- ✅ **Shareable Builds** - Share custom configurations with a simple link
+- ✅ **Source Code Included** - Every build includes the complete source code for audit and modification
+- ✅ **Plugin Ecosystem** - Extend firmware functionality without modifying core code
+
+## The Plugin Ecosystem
+
+Along with the builder, Mesh Forge includes a plugin ecosystem that allows developers to create extensions to Meshtastic's core firmware without sending Pull Requests to the core repository or forcing users to compile firmware manually.
+
+The vision is that there may someday be hundreds of plugins covering functionality either too specific or too high level to be considered core. This enables the community to extend Meshtastic in ways that wouldn't be practical to include in the main firmware.
+
+## Sovereignty
+
+Every firmware build from Mesh Forge includes not just the binary, but a complete source code zip file containing the configuration files and build recipe (`platformio.ini`) used to create your binary. You are free to audit, modify, and build that code on any system you choose.
+
+While the build tools themselves (PlatformIO, pip, etc.) still require internet connectivity, Mesh Forge provides full transparency and control over the firmware source code itself.
+
+## Getting Started
+
+Ready to build your custom firmware? Visit the [builder](https://meshforge.org/builds/new) to get started, or explore the [Plugin Registry](/docs/registry) to see what's available.

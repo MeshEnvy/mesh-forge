@@ -1,0 +1,106 @@
+# nRF52 Device Flashing Guide
+
+## Overview
+
+This guide will walk you through flashing custom firmware to your nRF device (nRF52840, nRF52832, etc.) using the UF2 firmware files downloaded from MeshForge.
+
+## Prerequisites
+
+- Custom firmware built and downloaded from MeshForge
+- nRF device (nRF52840, nRF52832, or compatible)
+- USB cable to connect your device to your computer
+
+## Step-by-Step Instructions
+
+### 1. Build and Download Firmware
+
+1. Build your custom firmware for your nRF device on [meshforge.org](https://meshforge.org/)
+2. When the build completes, download the compressed firmware archive (`.tgz` file)
+
+### 2. Extract Firmware Files
+
+Extract the downloaded `.tgz` archive to a folder. You should see the following files:
+
+- `firmware.uf2` - UF2 firmware file (this is what you'll flash)
+- `firmware.elf` - ELF debug file (not needed for flashing)
+
+**Note:** The `firmware.uf2` file is the main file you need for flashing.
+
+### 3. Enter DFU Mode
+
+Your nRF device needs to be in DFU (Device Firmware Update) mode before flashing. The method varies by device:
+
+#### Common Methods:
+
+- **Double-tap reset button**: Quickly press the reset button twice in succession
+- **Button combination**: Hold the BOOT/DFU button while pressing and releasing RESET
+- **Specific device instructions**: Some devices have unique methods (check your device documentation)
+
+#### Verify DFU Mode:
+
+When successfully in DFU mode, you should see:
+
+- A new USB drive appear on your computer (typically named "DFU" or similar)
+- The device LED may change behavior (blinking pattern or solid color)
+- The device will not appear as a serial port
+
+### 4. Flash the Firmware
+
+1. **Locate the USB drive**: Open your file manager and find the DFU drive that appeared when you entered DFU mode
+2. **Copy the UF2 file**: Drag and drop (or copy) the `firmware.uf2` file onto the DFU drive
+3. **Wait for completion**: The device will automatically begin flashing. You may see the drive activity indicator or LED changes
+4. **Automatic reboot**: Once flashing completes, the device will automatically reboot and exit DFU mode
+
+### 5. Verify the Flash
+
+After the device reboots:
+
+- The DFU drive should disappear from your computer
+- The device should appear as a serial port (if applicable)
+- Your device should now be running the custom firmware
+
+## Troubleshooting
+
+### Device Not Entering DFU Mode
+
+- **Try different button combinations**: Some devices require specific timing or button sequences
+- **Check device documentation**: Your specific device may have unique DFU entry requirements
+- **Ensure USB connection**: Make sure the USB cable supports data transfer (not just charging)
+
+### DFU Drive Not Appearing
+
+- **Check device manager**: On Windows, verify the device is recognized
+- **Try different USB port**: Some USB ports may not work properly
+- **Install drivers**: Some devices require specific USB drivers (check manufacturer documentation)
+- **Try different cable**: Faulty cables can prevent proper communication
+
+### Flash Fails or Device Won't Boot
+
+- **Verify firmware compatibility**: Ensure the firmware matches your exact device model
+- **Try re-entering DFU mode**: Sometimes the device needs to be reset and DFU mode re-entered
+- **Check file integrity**: Re-download the firmware file to ensure it wasn't corrupted
+- **Use erase option**: Some devices may need to be erased before flashing (check device-specific instructions)
+
+### Device Stuck in DFU Mode
+
+- **Disconnect and reconnect**: Unplug the USB cable and plug it back in
+- **Hard reset**: Some devices have a hard reset method (check device documentation)
+- **Re-flash bootloader**: In extreme cases, the bootloader may need to be reflashed using a debugger
+
+## Additional Notes
+
+- **Firmware versions**: Always ensure you're flashing firmware compatible with your device model
+- **Backup**: If possible, keep a backup of your working firmware before flashing new versions
+- **Multiple devices**: If flashing multiple devices, ensure each is in DFU mode before copying the UF2 file
+
+## Device-Specific Information
+
+Different nRF devices may have slight variations in the flashing process. Common nRF devices include:
+
+- **nRF52840**: Most common, supports UF2 bootloader
+- **nRF52832**: Older generation, may require different methods
+- **Adafruit nRF52840 Feather**: Uses double-tap reset for DFU mode
+- **Seeed XIAO nRF52840**: Typically uses double-tap reset
+- **RAK4631**: May use different button combinations
+
+Check your specific device documentation for exact DFU entry procedures.

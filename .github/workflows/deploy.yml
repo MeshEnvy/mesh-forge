@@ -19,7 +19,7 @@ jobs:
         run: |
           git remote add meshtastic git@github.com:meshtastic/firmware.git
         working-directory: vendor/firmware
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
@@ -39,10 +39,3 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
-
-      - name: Deploy Registry
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --config wrangler-registry.json
