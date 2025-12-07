@@ -1,5 +1,5 @@
-import { Link } from "../../components/Link";
-import { usePageContext } from "vike-react/usePageContext";
+import { usePageContext } from "vike-react/usePageContext"
+import { Link } from "../../components/Link"
 
 const navSections = [
   {
@@ -19,12 +19,12 @@ const navSections = [
       { href: "/docs/nRF52", label: "nRF52" },
     ],
   },
-];
+]
 
 function NavLink({ href, label }: { href: string; label: string }) {
-  const pageContext = usePageContext();
-  const { urlPathname } = pageContext;
-  const isActive = href === "/docs" ? urlPathname === href : urlPathname.startsWith(href);
+  const pageContext = usePageContext()
+  const { urlPathname } = pageContext
+  const isActive = href === "/docs" ? urlPathname === href : urlPathname.startsWith(href)
 
   return (
     <Link href={href}>
@@ -38,7 +38,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
         {label}
       </span>
     </Link>
-  );
+  )
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -55,7 +55,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </h3>
                 )}
                 <ul className="space-y-1 mt-1">
-                  {section.items.map((item) => (
+                  {section.items.map(item => (
                     <li key={item.href}>
                       <NavLink href={item.href} label={item.label} />
                     </li>
@@ -70,5 +70,5 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <article className="prose prose-invert lg:prose-xl max-w-none">{children}</article>
       </main>
     </div>
-  );
+  )
 }

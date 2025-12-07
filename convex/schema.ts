@@ -1,6 +1,6 @@
-import { authTables } from '@convex-dev/auth/server'
-import { defineSchema, defineTable } from 'convex/server'
-import { v } from 'convex/values'
+import { authTables } from "@convex-dev/auth/server"
+import { defineSchema, defineTable } from "convex/server"
+import { v } from "convex/values"
 
 export const buildConfigFields = {
   version: v.string(),
@@ -10,7 +10,7 @@ export const buildConfigFields = {
 }
 
 export const profileFields = {
-  userId: v.id('users'),
+  userId: v.id("users"),
   name: v.string(),
   description: v.string(),
   config: v.object(buildConfigFields),
@@ -43,7 +43,7 @@ export const pluginFields = {
 }
 
 export const userSettingsFields = {
-  userId: v.id('users'),
+  userId: v.id("users"),
   isAdmin: v.boolean(),
 }
 
@@ -51,8 +51,8 @@ export const schema = defineSchema({
   ...authTables,
   profiles: defineTable(profileFields),
   builds: defineTable(buildFields),
-  plugins: defineTable(pluginFields).index('by_slug', ['slug']),
-  userSettings: defineTable(userSettingsFields).index('by_user', ['userId']),
+  plugins: defineTable(pluginFields).index("by_slug", ["slug"]),
+  userSettings: defineTable(userSettingsFields).index("by_user", ["userId"]),
 })
 
 export const buildsDocValidator = schema.tables.builds.validator

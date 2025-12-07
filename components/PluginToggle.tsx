@@ -1,5 +1,5 @@
-import { ExternalLink, Star } from 'lucide-react'
-import { Switch } from '@/components/ui/switch'
+import { Switch } from "@/components/ui/switch"
+import { ExternalLink, Star } from "lucide-react"
 
 interface PluginToggleProps {
   id: string
@@ -26,17 +26,17 @@ export function PluginToggle({
   homepage,
   version,
   disabled = false,
-  enabledLabel = 'Add',
+  enabledLabel = "Add",
   incompatibleReason,
 }: PluginToggleProps) {
   const isIncompatible = !!incompatibleReason
-  
+
   return (
     <div
       className={`relative flex items-start gap-4 p-4 rounded-lg border-2 transition-colors ${
         isIncompatible
-          ? 'border-slate-800 bg-slate-900/30 opacity-60 cursor-not-allowed'
-          : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
+          ? "border-slate-800 bg-slate-900/30 opacity-60 cursor-not-allowed"
+          : "border-slate-700 bg-slate-900/50 hover:border-slate-600"
       }`}
     >
       {/* Flash count and homepage links in lower right */}
@@ -63,7 +63,7 @@ export function PluginToggle({
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-slate-400 hover:text-slate-300 transition-colors"
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
@@ -71,20 +71,14 @@ export function PluginToggle({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-1">
-          <h4 className={`font-semibold text-sm ${isIncompatible ? 'text-slate-500' : ''}`}>
-            {name}
-          </h4>
-          {featured && (
-            <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-          )}
+          <h4 className={`font-semibold text-sm ${isIncompatible ? "text-slate-500" : ""}`}>{name}</h4>
+          {featured && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
         </div>
-        <p className={`text-xs leading-relaxed ${isIncompatible ? 'text-slate-500' : 'text-slate-400'}`}>
+        <p className={`text-xs leading-relaxed ${isIncompatible ? "text-slate-500" : "text-slate-400"}`}>
           {description}
         </p>
         {isIncompatible && incompatibleReason && (
-          <p className="text-xs text-red-400 mt-1 font-medium">
-            {incompatibleReason}
-          </p>
+          <p className="text-xs text-red-400 mt-1 font-medium">{incompatibleReason}</p>
         )}
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0">
@@ -94,7 +88,7 @@ export function PluginToggle({
           disabled={disabled}
           labelLeft="Skip"
           labelRight={enabledLabel}
-          className={isEnabled ? 'bg-green-600' : 'bg-slate-600'}
+          className={isEnabled ? "bg-green-600" : "bg-slate-600"}
         />
       </div>
     </div>

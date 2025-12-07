@@ -1,4 +1,4 @@
-import { Switch } from '@/components/ui/switch'
+import { Switch } from "@/components/ui/switch"
 
 interface ModuleToggleProps {
   id: string
@@ -8,12 +8,7 @@ interface ModuleToggleProps {
   onToggle: (excluded: boolean) => void
 }
 
-export function ModuleToggle({
-  name,
-  description,
-  isExcluded,
-  onToggle,
-}: ModuleToggleProps) {
+export function ModuleToggle({ name, description, isExcluded, onToggle }: ModuleToggleProps) {
   return (
     <div className="flex items-start gap-4 p-4 rounded-lg border-2 border-slate-700 bg-slate-900/50 hover:border-slate-600 transition-colors">
       <div className="flex-1 min-w-0">
@@ -26,7 +21,7 @@ export function ModuleToggle({
           onCheckedChange={onToggle}
           labelLeft="Default"
           labelRight="Excluded"
-          className={isExcluded ? 'bg-orange-600' : 'bg-slate-600'}
+          className={isExcluded ? "bg-orange-600" : "bg-slate-600"}
         />
       </div>
     </div>

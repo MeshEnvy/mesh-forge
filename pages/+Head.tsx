@@ -1,11 +1,11 @@
 // https://vike.dev/Head
 
-import logoUrl from "../assets/logo.png";
-import faviconUrl from "../assets/favicon.svg";
-import appleTouchIconUrl from "../assets/apple-touch-icon.png";
-import siteWebmanifestUrl from "../assets/site.webmanifest";
-import favicon96x96Url from "../assets/favicon-96x96.png";
-import faviconIcoUrl from "../assets/favicon.ico";
+import appleTouchIconUrl from "../assets/apple-touch-icon.png"
+import favicon96x96Url from "../assets/favicon-96x96.png"
+import faviconIcoUrl from "../assets/favicon.ico"
+import faviconUrl from "../assets/favicon.svg"
+import logoUrl from "../assets/logo.png"
+import siteWebmanifestUrl from "../assets/site.webmanifest"
 
 export function Head() {
   return (
@@ -18,5 +18,5 @@ export function Head() {
       <link rel="manifest" href={siteWebmanifestUrl} />
       <link rel="icon" href={logoUrl} />
     </>
-  );
+  )
 }

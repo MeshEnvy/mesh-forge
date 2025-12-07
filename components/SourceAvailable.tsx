@@ -7,10 +7,7 @@ interface SourceAvailableProps {
  * Component that only renders children when sourcePath is available.
  * Uses the sourcePath field from the build instead of polling.
  */
-export function SourceAvailable({
-  sourcePath,
-  children,
-}: SourceAvailableProps) {
+export function SourceAvailable({ sourcePath, children }: SourceAvailableProps) {
   if (!sourcePath) {
     return null
   }

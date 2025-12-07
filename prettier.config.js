@@ -10,6 +10,6 @@ const config = {
   tabWidth: 2,
   useTabs: false,
   semi: false,
-};
+}
 
-export default config;
+export default config

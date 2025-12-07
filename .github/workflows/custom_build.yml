@@ -4,30 +4,30 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target board (e.g. rak4631)'
+        description: "Target board (e.g. rak4631)"
         required: true
         type: string
       flags:
-        description: 'Build flags (e.g. -DMESHTASTIC_EXCLUDE_MQTT)'
+        description: "Build flags (e.g. -DMESHTASTIC_EXCLUDE_MQTT)"
         required: false
         type: string
       version:
-        description: 'Firmware Version (Tag/Branch)'
+        description: "Firmware Version (Tag/Branch)"
         required: true
       build_id:
-        description: 'Convex Build ID'
+        description: "Convex Build ID"
         required: true
         type: string
       build_hash:
-        description: 'Build hash for artifact naming'
+        description: "Build hash for artifact naming"
         required: true
         type: string
       convex_url:
-        description: 'Convex Site URL'
+        description: "Convex Site URL"
         required: true
         type: string
       plugins:
-        description: 'Space-separated plugin slugs to install'
+        description: "Space-separated plugin slugs to install"
         required: false
         type: string
 
@@ -71,7 +71,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Update Status - Fetching Firmware
         shell: bash
@@ -160,13 +160,13 @@ jobs:
           - PlatformIO dependencies (\`.pio/\`) are not included - PlatformIO will download these as needed
           - The build flags above must be set exactly as shown to reproduce the build
           EOF
-          
+
           # Create MESHFORGE.md so it gets included in the archive
           # (already created above, just ensuring it exists)
-          
+
           # Define archive suffix for consistent naming
           ARTIFACT_ARCHIVE_SUFFIX="-${{ inputs.build_hash }}-${{ github.run_id }}.tar.gz"
-          
+
           # Create archive from working directory to include plugins installed by mpm
           # Exclude .git, .pio, and build artifacts
           cd ..
@@ -177,12 +177,12 @@ jobs:
               --exclude='build' \
               -czf "source${ARTIFACT_ARCHIVE_SUFFIX}" \
               -C firmware .
-          
+
           update_status uploading_source_archive
 
           SOURCE_ARCHIVE_PATH="/source${ARTIFACT_ARCHIVE_SUFFIX}"
           SOURCE_OBJECT_PATH="${R2_BUCKET_NAME}/source${ARTIFACT_ARCHIVE_SUFFIX}"
-          
+
           # Upload source archive to R2
           wrangler r2 object put "$SOURCE_OBJECT_PATH" \
             --file "source${ARTIFACT_ARCHIVE_SUFFIX}" --remote

@@ -1,9 +1,9 @@
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import vike from "vike/plugin";
-import { defineConfig } from "vite";
-import path from "node:path";
-import mdx from "@mdx-js/rollup";
+import mdx from "@mdx-js/rollup"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import path from "node:path"
+import vike from "vike/plugin"
+import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [vike(), mdx(), react(), tailwindcss()],
@@ -12,4 +12,4 @@ export default defineConfig({
       "@": path.resolve(__dirname, "."),
     },
   },
-});
+})

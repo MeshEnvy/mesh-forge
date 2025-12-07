@@ -1,20 +1,18 @@
-import "./Layout.css";
-import "./tailwind.css";
-import logoUrl from "../assets/logo.png";
-import { Link } from "../components/Link";
-import { ConvexReactClient } from "convex/react";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import Navbar from "@/components/Navbar";
-import { usePageContext } from "vike-react/usePageContext";
+import Navbar from "@/components/Navbar"
+import { ConvexAuthProvider } from "@convex-dev/auth/react"
+import { ConvexReactClient } from "convex/react"
+import { usePageContext } from "vike-react/usePageContext"
+import "./Layout.css"
+import "./tailwind.css"
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string)
 
 function ConditionalNavbar() {
-  const pageContext = usePageContext();
+  const pageContext = usePageContext()
   if (pageContext.urlPathname === "/") {
-    return null;
+    return null
   }
-  return <Navbar />;
+  return <Navbar />
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -23,5 +21,5 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <ConditionalNavbar />
       {children}
     </ConvexAuthProvider>
-  );
+  )
 }

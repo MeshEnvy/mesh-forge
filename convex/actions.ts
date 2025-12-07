@@ -1,10 +1,10 @@
-import { v } from 'convex/values'
-import { internal } from './_generated/api'
-import { action } from './_generated/server'
+import { v } from "convex/values"
+import { internal } from "./_generated/api"
+import { action } from "./_generated/server"
 
 export const dispatchGithubBuild = action({
   args: {
-    buildId: v.id('builds'),
+    buildId: v.id("builds"),
     target: v.string(),
     flags: v.string(),
     version: v.string(),
@@ -14,52 +14,49 @@ export const dispatchGithubBuild = action({
   handler: async (ctx, args) => {
     const githubToken = process.env.GITHUB_TOKEN
     if (!githubToken) {
-      throw new Error('GITHUB_TOKEN is not set')
+      throw new Error("GITHUB_TOKEN is not set")
     }
 
     const convexUrl = process.env.CONVEX_SITE_URL
     if (!convexUrl) {
-      console.error('CONVEX_SITE_URL is not set')
+      console.error("CONVEX_SITE_URL is not set")
       // Proceeding anyway might fail if workflow requires it
     }
 
-    console.log('dispatchGithubBuild args:', JSON.stringify(args, null, 2))
+    console.log("dispatchGithubBuild args:", JSON.stringify(args, null, 2))
 
     if (!args.buildHash) {
-      throw new Error('args.buildHash is missing or empty')
+      throw new Error("args.buildHash is missing or empty")
     }
 
     // Use test workflow when running in Convex dev mode
-    const isDev = process.env.CONVEX_ENV === 'dev'
-    const workflowFile = isDev ? 'custom_build_test.yml' : 'custom_build.yml'
+    const isDev = process.env.CONVEX_ENV === "dev"
+    const workflowFile = isDev ? "custom_build_test.yml" : "custom_build.yml"
 
     const payload = {
-      ref: 'main', // or make this configurable
+      ref: "main", // or make this configurable
       inputs: {
         target: args.target,
         flags: args.flags,
         version: args.version,
         build_id: args.buildId,
         build_hash: args.buildHash,
-        convex_url: convexUrl || 'https://example.com', // Fallback to avoid missing input error if that's the cause
-        plugins: (args.plugins ?? []).join(' '),
+        convex_url: convexUrl || "https://example.com", // Fallback to avoid missing input error if that's the cause
+        plugins: (args.plugins ?? []).join(" "),
       },
     }
 
-    console.log(
-      `Dispatching GitHub build to ${workflowFile} with payload:`,
-      JSON.stringify(payload, null, 2)
-    )
+    console.log(`Dispatching GitHub build to ${workflowFile} with payload:`, JSON.stringify(payload, null, 2))
 
     try {
       const url = `https://api.github.com/repos/MeshEnvy/mesh-forge/actions/workflows/${workflowFile}/dispatches`
-      console.log('GitHub API URL:', url)
+      console.log("GitHub API URL:", url)
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Bearer ${githubToken}`,
-          Accept: 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json',
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       })

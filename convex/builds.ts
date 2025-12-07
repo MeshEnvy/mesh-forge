@@ -1,14 +1,14 @@
-import { v } from 'convex/values'
-import { pick } from 'convex-helpers'
-import { api, internal } from './_generated/api'
-import type { Doc, Id } from './_generated/dataModel'
-import { internalMutation, mutation, query } from './_generated/server'
-import { generateSignedDownloadUrl } from './lib/r2'
-import { buildFields } from './schema'
+import { pick } from "convex-helpers"
+import { v } from "convex/values"
+import { api, internal } from "./_generated/api"
+import type { Doc, Id } from "./_generated/dataModel"
+import { internalMutation, mutation, query } from "./_generated/server"
+import { generateSignedDownloadUrl } from "./lib/r2"
+import { buildFields } from "./schema"
 
 export enum ArtifactType {
-  Firmware = 'firmware',
-  Source = 'source',
+  Firmware = "firmware",
+  Source = "source",
 }
 
 type BuildUpdateData = {
@@ -17,7 +17,7 @@ type BuildUpdateData = {
 }
 
 export const get = query({
-  args: { id: v.id('builds') },
+  args: { id: v.id("builds") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.id)
   },
@@ -27,8 +27,8 @@ export const getByHash = query({
   args: { buildHash: v.string() },
   handler: async (ctx, args) => {
     const build = await ctx.db
-      .query('builds')
-      .filter((q) => q.eq(q.field('buildHash'), args.buildHash))
+      .query("builds")
+      .filter(q => q.eq(q.field("buildHash"), args.buildHash))
       .unique()
     return build ?? null
   },
@@ -38,15 +38,13 @@ export const getByHash = query({
  * Computes flags string from build config.
  * Only excludes modules explicitly marked as excluded (config[id] === true).
  */
-export function computeFlagsFromConfig(
-  config: Doc<'builds'>['config']
-): string {
+export function computeFlagsFromConfig(config: Doc<"builds">["config"]): string {
   // Sort modules to ensure consistent order
   return Object.keys(config.modulesExcluded)
     .sort()
-    .filter((module) => config.modulesExcluded[module])
+    .filter(module => config.modulesExcluded[module])
     .map((moduleExcludedName: string) => `-D${moduleExcludedName}=1`)
-    .join(' ')
+    .join(" ")
 }
 
 /**
@@ -54,7 +52,7 @@ export function computeFlagsFromConfig(
  * Uses characters: 0-9, a-z, A-Z (62 characters total)
  */
 function base62Encode(bytes: Uint8Array): string {
-  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
   // Convert bytes to a big-endian number
   let num = BigInt(0)
@@ -63,7 +61,7 @@ function base62Encode(bytes: Uint8Array): string {
   }
 
   // Convert number to base62
-  if (num === BigInt(0)) return '0'
+  if (num === BigInt(0)) return "0"
 
   const result: string[] = []
   while (num > BigInt(0)) {
@@ -71,7 +69,7 @@ function base62Encode(bytes: Uint8Array): string {
     num = num / BigInt(62)
   }
 
-  return result.reverse().join('')
+  return result.reverse().join("")
 }
 
 /**
@@ -97,7 +95,7 @@ async function computeBuildHashInternal(
   // Use Web Crypto API for SHA-256 hashing
   const encoder = new TextEncoder()
   const data = encoder.encode(input)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data)
   const hashBytes = new Uint8Array(hashBuffer)
 
   // Encode to base62 instead of hex
@@ -108,17 +106,10 @@ async function computeBuildHashInternal(
  * Computes buildHash from build config.
  * This is the single source of truth for build hash computation.
  */
-export async function computeBuildHash(
-  config: Doc<'builds'>['config']
-): Promise<{ hash: string; flags: string }> {
+export async function computeBuildHash(config: Doc<"builds">["config"]): Promise<{ hash: string; flags: string }> {
   const flags = computeFlagsFromConfig(config)
   const plugins = config.pluginsEnabled ?? []
-  const hash = await computeBuildHashInternal(
-    config.version,
-    config.target,
-    flags,
-    plugins
-  )
+  const hash = await computeBuildHashInternal(config.version, config.target, flags, plugins)
   return { hash, flags }
 }
 
@@ -127,18 +118,17 @@ export async function computeBuildHash(
  * Uses {artifactType}-<buildHash>-<githubRunId>.tar.gz format.
  */
 export function getR2ArtifactUrl(
-  build: Pick<Doc<'builds'>, 'buildHash' | 'githubRunId'>,
+  build: Pick<Doc<"builds">, "buildHash" | "githubRunId">,
   artifactType: ArtifactType
 ): string {
   const r2PublicUrl = process.env.R2_PUBLIC_URL
   if (!r2PublicUrl) {
-    throw new Error('R2_PUBLIC_URL is not set')
+    throw new Error("R2_PUBLIC_URL is not set")
   }
   if (!build.githubRunId) {
-    throw new Error('githubRunId is required to construct artifact URL')
+    throw new Error("githubRunId is required to construct artifact URL")
   }
-  const artifactTypeStr =
-    artifactType === ArtifactType.Source ? 'source' : 'firmware'
+  const artifactTypeStr = artifactType === ArtifactType.Source ? "source" : "firmware"
   const path = `/${artifactTypeStr}-${build.buildHash}-${build.githubRunId}.tar.gz`
   return `${r2PublicUrl}${path}`
 }
@@ -147,7 +137,7 @@ export function getR2ArtifactUrl(
 // This is the single source of truth for build creation
 export const upsertBuild = internalMutation({
   args: {
-    ...pick(buildFields, ['buildHash', 'config']),
+    ...pick(buildFields, ["buildHash", "config"]),
     status: v.optional(v.string()),
     flags: v.string(),
   },
@@ -155,8 +145,8 @@ export const upsertBuild = internalMutation({
   handler: async (ctx, args) => {
     // Check if build already exists with this hash
     const existingBuild = await ctx.db
-      .query('builds')
-      .filter((q) => q.eq(q.field('buildHash'), args.buildHash))
+      .query("builds")
+      .filter(q => q.eq(q.field("buildHash"), args.buildHash))
       .unique()
 
     const { status, buildHash, config, flags } = args
@@ -170,8 +160,8 @@ export const upsertBuild = internalMutation({
     }
 
     // Create new build (artifact paths are omitted, will be undefined)
-    const buildId = await ctx.db.insert('builds', {
-      status: 'queued',
+    const buildId = await ctx.db.insert("builds", {
+      status: "queued",
       startedAt: Date.now(),
       buildHash,
       updatedAt: Date.now(),
@@ -203,7 +193,7 @@ export const ensureBuildFromConfig = mutation({
   },
   handler: async (ctx, args) => {
     // Construct config for the build
-    const config: Doc<'builds'>['config'] = {
+    const config: Doc<"builds">["config"] = {
       version: args.version,
       modulesExcluded: args.modulesExcluded ?? {},
       target: args.target,
@@ -214,8 +204,8 @@ export const ensureBuildFromConfig = mutation({
     const { hash: buildHash, flags } = await computeBuildHash(config)
 
     const existingBuild = await ctx.db
-      .query('builds')
-      .filter((q) => q.eq(q.field('buildHash'), buildHash))
+      .query("builds")
+      .filter(q => q.eq(q.field("buildHash"), buildHash))
       .unique()
 
     if (existingBuild) {
@@ -226,14 +216,11 @@ export const ensureBuildFromConfig = mutation({
       }
     }
 
-    const buildId: Id<'builds'> = await ctx.runMutation(
-      internal.builds.upsertBuild,
-      {
-        buildHash,
-        flags,
-        config,
-      }
-    )
+    const buildId: Id<"builds"> = await ctx.runMutation(internal.builds.upsertBuild, {
+      buildHash,
+      flags,
+      config,
+    })
 
     return {
       buildId,
@@ -245,7 +232,7 @@ export const ensureBuildFromConfig = mutation({
 
 // Internal query to get build without auth checks (for webhooks)
 export const getInternal = internalMutation({
-  args: { buildId: v.id('builds') },
+  args: { buildId: v.id("builds") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.buildId)
   },
@@ -254,12 +241,12 @@ export const getInternal = internalMutation({
 // Internal mutation to log errors from actions
 export const logBuildError = internalMutation({
   args: {
-    buildId: v.id('builds'),
+    buildId: v.id("builds"),
     error: v.string(),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.buildId, {
-      status: 'failure',
+      status: "failure",
       completedAt: Date.now(),
     })
   },
@@ -268,14 +255,8 @@ export const logBuildError = internalMutation({
 // Internal mutation to update build status
 export const updateBuildStatus = internalMutation({
   args: {
-    ...pick(buildFields, [
-      'status',
-      'completedAt',
-      'githubRunId',
-      'firmwarePath',
-      'sourcePath',
-    ]),
-    buildId: v.id('builds'),
+    ...pick(buildFields, ["status", "completedAt", "githubRunId", "firmwarePath", "sourcePath"]),
+    buildId: v.id("builds"),
   },
   handler: async (ctx, args) => {
     const build = await ctx.db.get(args.buildId)
@@ -291,12 +272,12 @@ export const updateBuildStatus = internalMutation({
     }
 
     // Only set completedAt for final statuses
-    if (args.status === 'success' || args.status === 'failure') {
+    if (args.status === "success" || args.status === "failure") {
       updateData.completedAt = Date.now()
     }
 
     // Clear artifact paths when build starts (queued status)
-    if (args.status === 'queued') {
+    if (args.status === "queued") {
       updateData.firmwarePath = undefined
       updateData.sourcePath = undefined
     }
@@ -327,9 +308,7 @@ export const updateBuildStatus = internalMutation({
       updateData.githubRunId = args.githubRunId
     }
 
-    updateData.githubRunIdHistory = [...new Set(existingHistory)].filter(
-      (id) => id !== args.githubRunId
-    )
+    updateData.githubRunIdHistory = [...new Set(existingHistory)].filter(id => id !== args.githubRunId)
 
     await ctx.db.patch(args.buildId, updateData)
   },
@@ -337,34 +316,28 @@ export const updateBuildStatus = internalMutation({
 
 export const generateDownloadUrl = mutation({
   args: {
-    buildId: v.id('builds'),
-    artifactType: v.union(v.literal('firmware'), v.literal('source')),
-    profileId: v.optional(v.id('profiles')),
+    buildId: v.id("builds"),
+    artifactType: v.union(v.literal("firmware"), v.literal("source")),
+    profileId: v.optional(v.id("profiles")),
   },
   handler: async (ctx, args) => {
     const build = await ctx.db.get(args.buildId)
-    if (!build) throw new Error('Build not found')
+    if (!build) throw new Error("Build not found")
 
     if (!build.githubRunId) {
-      throw new Error('Build githubRunId is required for download')
+      throw new Error("Build githubRunId is required for download")
     }
 
-    const artifactTypeEnum =
-      args.artifactType === 'source'
-        ? ArtifactType.Source
-        : ArtifactType.Firmware
+    const artifactTypeEnum = args.artifactType === "source" ? ArtifactType.Source : ArtifactType.Firmware
 
     const isSource = artifactTypeEnum === ArtifactType.Source
-    const artifactTypeStr =
-      artifactTypeEnum === ArtifactType.Source ? 'source' : 'firmware'
-    const contentType = isSource
-      ? 'application/gzip'
-      : 'application/octet-stream'
+    const artifactTypeStr = artifactTypeEnum === ArtifactType.Source ? "source" : "firmware"
+    const contentType = isSource ? "application/gzip" : "application/octet-stream"
 
     // Use stored path if available, otherwise construct from buildHash and githubRunId
     const storedPath = isSource ? build.sourcePath : build.firmwarePath
     const objectKey = storedPath
-      ? storedPath.startsWith('/')
+      ? storedPath.startsWith("/")
         ? storedPath.slice(1)
         : storedPath
       : `${artifactTypeStr}-${build.buildHash}-${build.githubRunId}.tar.gz`
@@ -373,7 +346,7 @@ export const generateDownloadUrl = mutation({
     const profile = await (async () => {
       if (!args.profileId) return
       const profileDoc = await ctx.db.get(args.profileId)
-      if (!profileDoc) throw new Error('Profile not found')
+      if (!profileDoc) throw new Error("Profile not found")
       return profileDoc
     })()
 
@@ -381,9 +354,9 @@ export const generateDownloadUrl = mutation({
     const profileSlug = profile
       ? profile.name
           .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/(^-|-$)+/g, '')
-      : ''
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)+/g, "")
+      : ""
 
     // Increment profile flash count for firmware downloads
     if (profile && !isSource) {
@@ -395,18 +368,14 @@ export const generateDownloadUrl = mutation({
     }
 
     // Increment plugin flash counts for firmware downloads (independent of profile)
-    if (
-      !isSource &&
-      build.config.pluginsEnabled &&
-      build.config.pluginsEnabled.length > 0
-    ) {
+    if (!isSource && build.config.pluginsEnabled && build.config.pluginsEnabled.length > 0) {
       await ctx.runMutation(internal.plugins.incrementFlashCount, {
         slugs: build.config.pluginsEnabled,
       })
     }
 
     const last4Hash = build.buildHash.slice(-4)
-    const os = 'meshtastic' // OS/platform identifier
+    const os = "meshtastic" // OS/platform identifier
     const version = build.config.version
     const target = build.config.target
     const jobId = build.githubRunId

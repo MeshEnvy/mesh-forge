@@ -1,5 +1,5 @@
-import Builder from "../Builder";
+import Builder from "../Builder"
 
 export default function BuildNew() {
-  return <Builder />;
+  return <Builder />
 }

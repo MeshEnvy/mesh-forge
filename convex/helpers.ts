@@ -1,20 +1,15 @@
-import { getAuthUserId } from '@convex-dev/auth/server'
-import { ConvexError, v } from 'convex/values'
-import {
-  customAction,
-  customCtx,
-  customMutation,
-  customQuery,
-} from 'convex-helpers/server/customFunctions'
-import { api } from './_generated/api'
-import { action, mutation, query } from './_generated/server'
+import { getAuthUserId } from "@convex-dev/auth/server"
+import { customAction, customCtx, customMutation, customQuery } from "convex-helpers/server/customFunctions"
+import { ConvexError, v } from "convex/values"
+import { api } from "./_generated/api"
+import { action, mutation, query } from "./_generated/server"
 
 export const authQuery = customQuery(
   query,
-  customCtx(async (ctx) => {
+  customCtx(async ctx => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
-      throw new ConvexError('Not authenticated!')
+      throw new ConvexError("Not authenticated!")
     }
     return {}
   })
@@ -22,10 +17,10 @@ export const authQuery = customQuery(
 
 export const authMutation = customMutation(
   mutation,
-  customCtx(async (ctx) => {
+  customCtx(async ctx => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
-      throw new ConvexError('Not authenticated!')
+      throw new ConvexError("Not authenticated!")
     }
     return {}
   })
@@ -33,10 +28,10 @@ export const authMutation = customMutation(
 
 export const authAction = customAction(
   action,
-  customCtx(async (ctx) => {
+  customCtx(async ctx => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
-      throw new ConvexError('Not authenticated!')
+      throw new ConvexError("Not authenticated!")
     }
     return {}
   })
@@ -44,19 +39,19 @@ export const authAction = customAction(
 
 export const adminQuery = customQuery(
   query,
-  customCtx(async (ctx) => {
+  customCtx(async ctx => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
-      throw new ConvexError('Not authenticated!')
+      throw new ConvexError("Not authenticated!")
     }
 
     const userSettings = await ctx.db
-      .query('userSettings')
-      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .query("userSettings")
+      .withIndex("by_user", q => q.eq("userId", userId))
       .first()
 
     if (userSettings?.isAdmin !== true) {
-      throw new ConvexError('Unauthorized: Admin access required')
+      throw new ConvexError("Unauthorized: Admin access required")
     }
 
     return {}
@@ -65,19 +60,19 @@ export const adminQuery = customQuery(
 
 export const adminMutation = customMutation(
   mutation,
-  customCtx(async (ctx) => {
+  customCtx(async ctx => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
-      throw new ConvexError('Not authenticated!')
+      throw new ConvexError("Not authenticated!")
     }
 
     const userSettings = await ctx.db
-      .query('userSettings')
-      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .query("userSettings")
+      .withIndex("by_user", q => q.eq("userId", userId))
       .first()
 
     if (userSettings?.isAdmin !== true) {
-      throw new ConvexError('Unauthorized: Admin access required')
+      throw new ConvexError("Unauthorized: Admin access required")
     }
 
     return {}
@@ -86,10 +81,10 @@ export const adminMutation = customMutation(
 
 export const adminAction = customAction(
   action,
-  customCtx(async (ctx) => {
+  customCtx(async ctx => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
-      throw new ConvexError('Not authenticated!')
+      throw new ConvexError("Not authenticated!")
     }
 
     // Actions can't access ctx.db directly, so we need to use a query
@@ -97,7 +92,7 @@ export const adminAction = customAction(
       userId,
     })
     if (!isAdmin) {
-      throw new ConvexError('Unauthorized: Admin access required')
+      throw new ConvexError("Unauthorized: Admin access required")
     }
 
     return {}
@@ -106,11 +101,11 @@ export const adminAction = customAction(
 
 // Internal query to check if user is admin (used by action middleware)
 export const checkIsAdmin = query({
-  args: { userId: v.id('users') },
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const userSettings = await ctx.db
-      .query('userSettings')
-      .withIndex('by_user', (q) => q.eq('userId', args.userId))
+      .query("userSettings")
+      .withIndex("by_user", q => q.eq("userId", args.userId))
       .first()
 
     return userSettings?.isAdmin === true

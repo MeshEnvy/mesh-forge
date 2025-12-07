@@ -1,10 +1,10 @@
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 export async function generateSignedDownloadUrl(
   objectKey: string,
   filename: string,
-  contentType: string = 'application/octet-stream'
+  contentType: string = "application/octet-stream"
 ): Promise<string> {
   const accountId = process.env.R2_ACCOUNT_ID
   const accessKeyId = process.env.R2_ACCESS_KEY_ID
@@ -12,11 +12,11 @@ export async function generateSignedDownloadUrl(
   const bucketName = process.env.R2_BUCKET_NAME
 
   if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-    throw new Error('R2 credentials are not set')
+    throw new Error("R2 credentials are not set")
   }
 
   const s3 = new S3Client({
-    region: 'auto',
+    region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId,

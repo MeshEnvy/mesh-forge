@@ -1,19 +1,19 @@
-import { getAuthUserId } from '@convex-dev/auth/server'
-import { v } from 'convex/values'
-import { api } from './_generated/api'
-import { query } from './_generated/server'
-import { computeFlagsFromConfig } from './builds'
-import { adminMutation, adminQuery } from './helpers'
+import { getAuthUserId } from "@convex-dev/auth/server"
+import { v } from "convex/values"
+import { api } from "./_generated/api"
+import { query } from "./_generated/server"
+import { computeFlagsFromConfig } from "./builds"
+import { adminMutation, adminQuery } from "./helpers"
 
 export const isAdmin = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async ctx => {
     const userId = await getAuthUserId(ctx)
     if (!userId) return false
 
     const userSettings = await ctx.db
-      .query('userSettings')
-      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .query("userSettings")
+      .withIndex("by_user", q => q.eq("userId", userId))
       .first()
 
     return userSettings?.isAdmin === true
@@ -22,11 +22,11 @@ export const isAdmin = query({
 
 export const listFailedBuilds = adminQuery({
   args: {},
-  handler: async (ctx) => {
+  handler: async ctx => {
     const failedBuilds = await ctx.db
-      .query('builds')
-      .filter((q) => q.eq(q.field('status'), 'failure'))
-      .order('desc')
+      .query("builds")
+      .filter(q => q.eq(q.field("status"), "failure"))
+      .order("desc")
       .collect()
 
     return failedBuilds
@@ -35,8 +35,8 @@ export const listFailedBuilds = adminQuery({
 
 export const listAllBuilds = adminQuery({
   args: {},
-  handler: async (ctx) => {
-    const allBuilds = await ctx.db.query('builds').order('desc').collect()
+  handler: async ctx => {
+    const allBuilds = await ctx.db.query("builds").order("desc").collect()
 
     return allBuilds
   },
@@ -44,12 +44,12 @@ export const listAllBuilds = adminQuery({
 
 export const retryBuild = adminMutation({
   args: {
-    buildId: v.id('builds'),
+    buildId: v.id("builds"),
   },
   handler: async (ctx, args) => {
     const build = await ctx.db.get(args.buildId)
     if (!build) {
-      throw new Error('Build not found')
+      throw new Error("Build not found")
     }
 
     // Compute flags from config
@@ -68,7 +68,7 @@ export const retryBuild = adminMutation({
 
     // Update build status to queued and clear artifact paths
     await ctx.db.patch(args.buildId, {
-      status: 'queued',
+      status: "queued",
       updatedAt: Date.now(),
       firmwarePath: undefined,
       sourcePath: undefined,

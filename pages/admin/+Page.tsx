@@ -1,23 +1,23 @@
-import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { navigate } from "vike/client/router";
-import { BuildDownloadButton } from "@/components/BuildDownloadButton";
-import { Button } from "@/components/ui/button";
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
-import { ArtifactType } from "../../convex/builds";
+import { BuildDownloadButton } from "@/components/BuildDownloadButton"
+import { Button } from "@/components/ui/button"
+import { useMutation, useQuery } from "convex/react"
+import { useState } from "react"
+import { toast } from "sonner"
+import { navigate } from "vike/client/router"
+import { api } from "../../convex/_generated/api"
+import type { Id } from "../../convex/_generated/dataModel"
+import { ArtifactType } from "../../convex/builds"
 
-type FilterType = "all" | "failed";
+type FilterType = "all" | "failed"
 
 export default function Admin() {
-  const [filter, setFilter] = useState<FilterType>("failed");
-  const isAdmin = useQuery(api.admin.isAdmin);
-  const failedBuilds = useQuery(api.admin.listFailedBuilds);
-  const allBuilds = useQuery(api.admin.listAllBuilds);
-  const retryBuild = useMutation(api.admin.retryBuild);
+  const [filter, setFilter] = useState<FilterType>("failed")
+  const isAdmin = useQuery(api.admin.isAdmin)
+  const failedBuilds = useQuery(api.admin.listFailedBuilds)
+  const allBuilds = useQuery(api.admin.listAllBuilds)
+  const retryBuild = useMutation(api.admin.retryBuild)
 
-  const builds = filter === "failed" ? failedBuilds : allBuilds;
+  const builds = filter === "failed" ? failedBuilds : allBuilds
 
   // Show loading state
   if (isAdmin === undefined) {
@@ -25,7 +25,7 @@ export default function Admin() {
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>
       </div>
-    );
+    )
   }
 
   // Redirect if not admin
@@ -38,25 +38,25 @@ export default function Admin() {
           <Button onClick={() => navigate("/")}>Go Home</Button>
         </div>
       </div>
-    );
+    )
   }
 
   const handleRetry = async (buildId: Id<"builds">) => {
     try {
-      await retryBuild({ buildId });
+      await retryBuild({ buildId })
       toast.success("Build retry initiated", {
         description: "The build has been queued with the latest YAML.",
-      });
+      })
     } catch (error) {
       toast.error("Failed to retry build", {
         description: String(error),
-      });
+      })
     }
-  };
+  }
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
-  };
+    return new Date(timestamp).toLocaleString()
+  }
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -71,14 +71,14 @@ export default function Admin() {
         text: "text-yellow-400",
         label: "Queued",
       },
-    };
+    }
     const config = statusConfig[status as keyof typeof statusConfig] || {
       bg: "bg-slate-500/20",
       text: "text-slate-400",
       label: status,
-    };
-    return <span className={`px-2 py-1 ${config.bg} ${config.text} rounded text-sm`}>{config.label}</span>;
-  };
+    }
+    return <span className={`px-2 py-1 ${config.bg} ${config.text} rounded text-sm`}>{config.label}</span>
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8">
@@ -112,7 +112,7 @@ export default function Admin() {
           <div className="text-center text-slate-400 py-12">No {filter === "failed" ? "failed " : ""}builds found.</div>
         ) : (
           <div className="space-y-4">
-            {builds.map((build) => (
+            {builds.map(build => (
               <div key={build._id} className="bg-slate-900 border border-slate-800 rounded-lg p-6">
                 {/* Header Section */}
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
@@ -191,7 +191,7 @@ export default function Admin() {
                           {build.githubRunId}
                         </a>
                       )}
-                      {build.githubRunIdHistory?.map((id) => (
+                      {build.githubRunIdHistory?.map(id => (
                         <a
                           key={id}
                           href={`https://github.com/MeshEnvy/mesh-forge/actions/runs/${id}`}
@@ -219,5 +219,5 @@ export default function Admin() {
         )}
       </main>
     </div>
-  );
+  )
 }
