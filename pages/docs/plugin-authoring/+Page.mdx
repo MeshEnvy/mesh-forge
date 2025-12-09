@@ -14,6 +14,38 @@ mpm init
 
 The build system automatically uses MPM during PlatformIO builds to include all plugins and generate protobuf bindings.
 
+## Creating a New Plugin
+
+The easiest way to start a new plugin is using the `mpm new` command:
+
+```bash
+# From any directory
+mpm new "my-module-slug"
+
+# Use --force to overwrite an existing plugin
+mpm new "my-module-slug" --force
+```
+
+This creates a complete plugin template:
+
+- If a `plugins` directory exists in the current working directory, the plugin is created in `plugins/my-module-slug/src/`
+- Otherwise, the plugin is created in `my-module-slug/src/` in the current directory
+
+The template includes:
+
+- `plugin.h` - Module registration with version macros
+- `<ModuleName>Module.h` - Module header file inheriting from `SinglePortModule`
+- `<ModuleName>Module.cpp` - Module implementation with basic structure
+
+The template includes:
+
+- Proper module registration with `#pragma MPM_MODULE`
+- Variable assignment for module instance
+- LOG_INFO initialization message
+- Empty message handler ready for implementation
+
+After creating your plugin, edit the generated files to implement your functionality, then run `mpm generate` to regenerate protobuf files and module initialization code.
+
 ## Plugin Structure
 
 The only requirement for a plugin is that it must have a `./src` directory:
@@ -65,8 +97,9 @@ If your plugin implements a Meshtastic module, use the `#pragma MPM_MODULE` dire
 
 1. Add `#pragma MPM_MODULE(ClassName)` to your module's header file (`.h`)
 2. Optionally specify a variable name: `#pragma MPM_MODULE(ClassName, variableName)`
-3. If you specify a variable name, declare it as `extern` in your header file
-4. Your module will be automatically initialized when the firmware starts
+3. Optionally specify dependencies: `#pragma MPM_MODULE(ClassName, variableName, ['dep1', 'dep2'])`
+4. If you specify a variable name, declare it as `extern` in your header file
+5. Your module will be automatically initialized when the firmware starts
 
 Example (without variable):
 
@@ -98,6 +131,24 @@ extern MyModule *myModule;
 ```
 
 The variable will be assigned in the generated `init_dynamic_modules()` function. If you don't need to reference your module from other files, you can omit the variable name and extern declaration.
+
+### Plugin Dependencies
+
+Plugin dependencies are automatically read from `meshtastic-lock.json` (which is generated from registry dependencies). MPM ensures that dependency plugins are initialized before dependent plugins using topological sorting.
+
+Dependencies are specified in your plugin's `meshtastic.json` manifest file:
+
+```json
+{
+  "name": "my-plugin",
+  "dependencies": {
+    "lobbs": ">=1.1.0",
+    "lodb": ">=1.0.0"
+  }
+}
+```
+
+When you install your plugin with `mpm install`, these dependencies are resolved and stored in `meshtastic-lock.json`. During code generation, MPM reads these dependencies and ensures proper initialization order. Circular dependencies will generate a warning during code generation.
 
 > **Note**: Module registration is optional. Plugins that don't implement Meshtastic modules (e.g., utility libraries) don't need this.
 
