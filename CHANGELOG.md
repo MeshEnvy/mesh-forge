@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Minor
 
+- Switched OAuth authentication provider from Google to GitHub
 - Integrated Giscus comments into build pages for discussion threads per build configuration
 
 ### Patch

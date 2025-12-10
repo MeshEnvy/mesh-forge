@@ -48,7 +48,7 @@ export default function Navbar() {
             />
             <Unauthenticated>
               <Button
-                onClick={() => signIn("google", { redirectTo: window.location.href })}
+                onClick={() => signIn("github", { redirectTo: window.location.href })}
                 className="bg-cyan-600 hover:bg-cyan-700"
               >
                 Sign In
