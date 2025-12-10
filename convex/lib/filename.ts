@@ -1,4 +1,13 @@
 /**
+ * Artifact type enumeration.
+ * Safe to import in client-side code.
+ */
+export enum ArtifactType {
+  Firmware = "firmware",
+  Source = "source",
+}
+
+/**
  * Generates the artifact filename base (without extension) matching the download filename format.
  * Format: meshtastic-{version}-{target}-{last4hash}-{jobId}-{artifactType}
  * This is the canonical implementation used by both Convex backend and frontend.

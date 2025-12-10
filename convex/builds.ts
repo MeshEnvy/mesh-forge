@@ -3,14 +3,9 @@ import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import { internalMutation, mutation, query } from "./_generated/server"
-import { getArtifactFilenameBase } from "./lib/filename"
+import { ArtifactType, getArtifactFilenameBase } from "./lib/filename"
 import { generateSignedDownloadUrl } from "./lib/r2"
 import { buildFields } from "./schema"
-
-export enum ArtifactType {
-  Firmware = "firmware",
-  Source = "source",
-}
 
 type BuildUpdateData = {
   status: string
