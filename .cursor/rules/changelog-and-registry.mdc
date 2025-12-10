@@ -7,3 +7,5 @@ when making changes to a project that has a changelog, add the appropriate unrel
 when preparing an MPM plugin release, don't forget to update @public/registry.json
 
 changelog uses: major/minor/patch and does NOT use added/changed/removed
+
+when preparing a release, do not touch git. no tagging, no commits
