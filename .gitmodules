@@ -23,3 +23,6 @@
 [submodule "vendor/meshscript"]
 	path = vendor/meshscript
 	url = git@github.com:MeshEnvy/meshscript.git
+[submodule "vendor/meshcore-flasher"]
+	path = vendor/meshcore-flasher
+	url = git@github.com:meshcore-dev/flasher.meshcore.dev.git
