@@ -270,7 +270,16 @@ export function BuildProgress({ build, isAdmin = false, onRetry, showActions = t
             <div>
               <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
                 {getStatusIcon()}
-                {targetLabel}
+                <a
+                  href={`/builds/${build.buildHash}`}
+                  onClick={e => {
+                    e.preventDefault()
+                    navigate(`/builds/${build.buildHash}`)
+                  }}
+                  className="hover:text-cyan-400 transition-colors"
+                >
+                  {targetLabel}
+                </a>
                 {status !== "success" && status !== "failure" && (
                   <button
                     type="button"
