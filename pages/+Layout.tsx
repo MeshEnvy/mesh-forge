@@ -1,3 +1,4 @@
+import Footer from "@/components/Footer"
 import Navbar from "@/components/Navbar"
 import { ConvexAuthProvider } from "@convex-dev/auth/react"
 import { ConvexReactClient } from "convex/react"
@@ -18,8 +19,11 @@ function ConditionalNavbar() {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <ConvexAuthProvider client={convex}>
-      <ConditionalNavbar />
-      {children}
+      <div className="min-h-screen flex flex-col">
+        <ConditionalNavbar />
+        <main className="flex-1">{children}</main>
+        <Footer />
+      </div>
     </ConvexAuthProvider>
   )
 }

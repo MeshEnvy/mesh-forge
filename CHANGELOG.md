@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Minor
+
+- Added footer with links to legal pages (License, Privacy Policy, Terms of Service)
+- Added licensing notice page explaining GPLv3 licensing for generated projects
+- Added privacy policy page detailing data collection and usage
+- Added terms of service page with usage terms and disclaimers
+
 ## [0.2.0] - 2025-12-10
 
 ### Minor
