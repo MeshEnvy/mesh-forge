@@ -1,4 +1,14 @@
 {
+  "name": "mesh-forge",
+  "version": "0.1.0",
+  "private": true,
+  "author": "benallfree",
+  "license": "MIT",
+  "homepage": "https://meshforge.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MeshEnvy/mesh-forge.git"
+  },
   "scripts": {
     "generate:versions": "node scripts/generate-versions.js && biome format src/constants/versions.ts  --write",
     "generate:architecture": "node scripts/generate-architecture-hierarchy.js",
