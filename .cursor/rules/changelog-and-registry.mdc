@@ -2,6 +2,8 @@
 alwaysApply: true
 ---
 
-when making changes to a module that has a changelog, add the appropriate unreleased change log entry
+when making changes to a project that has a changelog, add the appropriate unreleased change log entry
 
 when preparing an MPM plugin release, don't forget to update @public/registry.json
+
+changelog uses: major/minor/patch and does NOT use added/changed/removed
