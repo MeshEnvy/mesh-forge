@@ -128,29 +128,18 @@ export function isRequiredByOther(
 }
 
 /**
- * Normalize architecture name (remove hyphens and underscores to match PlatformIO format)
- * PlatformIO uses "esp32s3", "nrf52840" (no hyphens, no underscores)
- * Hardware list uses "esp32-s3" (with hyphens)
- * Some sources might use "esp32_s3" (with underscores)
- */
-function normalizeArchitecture(arch: string): string {
-  return arch.replace(/[-_]/g, "")
-}
-
-/**
  * Trace a target/variant/architecture back to its base architecture
  * Follows the parent chain until it reaches a base architecture (null parent)
  */
 export function getBaseArchitecture(name: string): string | null {
-  const normalized = normalizeArchitecture(name)
   const parentMap = PARENT_MAP as Record<string, string | null>
-
   const visited = new Set<string>()
-  let current = normalized
+  let current: string | null = name
 
   while (current && !visited.has(current)) {
     visited.add(current)
-    const parent = parentMap[current]
+    if (!current) break
+    const parent: string | null | undefined = parentMap[current]
 
     // If parent is null, we've reached a base architecture
     if (parent === null) {
@@ -162,11 +151,11 @@ export function getBaseArchitecture(name: string): string | null {
       return current
     }
 
-    current = normalizeArchitecture(parent)
+    current = parent
   }
 
   // Circular reference or unknown, return the last known
-  return current || normalized
+  return current || name
 }
 
 /**
@@ -174,17 +163,16 @@ export function getBaseArchitecture(name: string): string | null {
  * (including itself and all parent architectures up to base)
  */
 export function getCompatibleArchitectures(arch: string): string[] {
-  const normalized = normalizeArchitecture(arch)
   const parentMap = PARENT_MAP as Record<string, string | null>
-
-  const compatible = [normalized]
+  const compatible = [arch]
   const visited = new Set<string>()
-  let current = normalized
+  let current: string | null = arch
 
   // Follow parent chain up to base architecture
   while (current && !visited.has(current)) {
     visited.add(current)
-    const parent = parentMap[current]
+    if (!current) break
+    const parent: string | null | undefined = parentMap[current]
 
     if (parent === null) {
       // Reached base architecture
@@ -196,12 +184,11 @@ export function getCompatibleArchitectures(arch: string): string[] {
       break
     }
 
-    const normalizedParent = normalizeArchitecture(parent)
-    if (!compatible.includes(normalizedParent)) {
-      compatible.push(normalizedParent)
+    if (!compatible.includes(parent)) {
+      compatible.push(parent)
     }
 
-    current = normalizedParent
+    current = parent
   }
 
   return compatible
@@ -227,18 +214,16 @@ export function isPluginCompatibleWithTarget(
 
   const parentMap = PARENT_MAP as Record<string, string | null>
 
-  // Normalize target name first (all keys in parentMap are normalized)
-  const normalizedTarget = normalizeArchitecture(targetName)
-
   // Get all compatible names for the target (target itself + all parents up to base architecture)
-  const compatibleNames = new Set<string>([normalizedTarget])
+  const compatibleNames = new Set<string>([targetName])
   const visited = new Set<string>()
-  let current = normalizedTarget
+  let current: string | null = targetName
 
-  // Follow parent chain (all keys and values in parentMap are already normalized)
+  // Follow parent chain
   while (current && !visited.has(current)) {
     visited.add(current)
-    const parent = parentMap[current]
+    if (!current) break
+    const parent: string | null | undefined = parentMap[current]
 
     if (parent === null) {
       // Reached base architecture
@@ -251,30 +236,21 @@ export function isPluginCompatibleWithTarget(
       break
     }
 
-    // Parent is already normalized (from JSON)
     compatibleNames.add(parent)
     current = parent
   }
 
   // Check excludes first - if target matches any exclude, it's incompatible
-  // compatibleNames are already normalized, normalize excludes for comparison
   if (pluginExcludes && pluginExcludes.length > 0) {
-    const isExcluded = pluginExcludes.some(exclude => {
-      const normalizedExclude = normalizeArchitecture(exclude)
-      return compatibleNames.has(normalizedExclude)
-    })
+    const isExcluded = pluginExcludes.some(exclude => compatibleNames.has(exclude))
     if (isExcluded) {
       return false
     }
   }
 
   // If includes are specified, target must match at least one include
-  // compatibleNames are already normalized, normalize includes for comparison
   if (pluginIncludes && pluginIncludes.length > 0) {
-    return pluginIncludes.some(include => {
-      const normalizedInclude = normalizeArchitecture(include)
-      return compatibleNames.has(normalizedInclude)
-    })
+    return pluginIncludes.some(include => compatibleNames.has(include))
   }
 
   // If no includes/excludes specified, assume compatible with all (backward compatible)
@@ -301,34 +277,30 @@ export function isPluginCompatibleWithArchitecture(
 export function getTargetsCompatibleWithIncludes(includes: string[]): Set<string> {
   const parentMap = PARENT_MAP as Record<string, string | null>
   const compatibleTargets = new Set<string>()
-
-  // Normalize includes
-  const normalizedIncludes = new Set(includes.map(include => normalizeArchitecture(include)))
+  const includesSet = new Set(includes)
 
   // For each target in the parent map, check if it or any of its ancestors match the includes
   for (const target of Object.keys(parentMap)) {
-    const normalizedTarget = normalizeArchitecture(target)
     const visited = new Set<string>()
-    let current: string | null = normalizedTarget
+    let current: string | null = target
 
     // Trace up the parent chain
     while (current && !visited.has(current)) {
       visited.add(current)
+      if (!current) break
 
       // Check if current matches any of the includes
-      if (normalizedIncludes.has(current)) {
-        // Add both the normalized version and the original (for matching against TARGETS)
-        compatibleTargets.add(normalizedTarget)
+      if (includesSet.has(current)) {
         compatibleTargets.add(target)
         break
       }
 
       // Move to parent
-      const parentValue = parentMap[current]
-      if (parentValue === null || parentValue === undefined) {
+      const parent: string | null | undefined = parentMap[current]
+      if (parent === null || parent === undefined) {
         break
       }
-      current = normalizeArchitecture(parentValue)
+      current = parent
     }
   }
 

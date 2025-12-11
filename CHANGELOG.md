@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Minor
+
+- Added vendors.json mapping vendors to models and platformio targets
+- Refactored targets.ts to use vendors.json and architecture-hierarchy.json instead of hardware-list.json
+- Updated architecture-hierarchy.json generation to use actual PlatformIO environment names (removed normalization)
+- Removed normalization from lib/utils.ts since all inputs now use standardized PlatformIO names
+
 ### Patch
 
 - Fix Convex server functions being imported in browser by moving ArtifactType enum to client-safe location

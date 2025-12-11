@@ -10,14 +10,6 @@ const VARIANTS_DIR = path.join(FIRMWARE_DIR, "variants")
 const OUTPUT_FILE = path.resolve(__dirname, "../constants/architecture-hierarchy.json")
 
 /**
- * Normalize architecture/target name (remove hyphens and underscores)
- * This ensures consistent format matching PlatformIO architecture names
- */
-function normalizeName(name) {
-  return name.replace(/[-_]/g, "")
-}
-
-/**
  * Parse PlatformIO ini file to extract sections and their properties
  */
 function parseIniFile(filePath) {
@@ -342,15 +334,8 @@ function buildParentMapping() {
     delete resolvedParentMap[key]
   }
 
-  // Normalize all keys and values (strip hyphens and underscores)
-  const normalizedMap = {}
-  for (const [key, value] of Object.entries(resolvedParentMap)) {
-    const normalizedKey = normalizeName(key)
-    const normalizedValue = value !== null ? normalizeName(value) : null
-    normalizedMap[normalizedKey] = normalizedValue
-  }
-
-  return normalizedMap
+  // Return map with actual PlatformIO environment names (no normalization)
+  return resolvedParentMap
 }
 
 /**
