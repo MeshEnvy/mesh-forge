@@ -15,11 +15,6 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Add meshtastic remote to vendor/firmware
-        run: |
-          git remote add meshtastic git@github.com:meshtastic/firmware.git
-        working-directory: vendor/firmware
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
