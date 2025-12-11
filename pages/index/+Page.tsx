@@ -149,7 +149,7 @@ export default function LandingPage() {
                       description={customBuildPlugin.description}
                       imageUrl={customBuildPlugin.imageUrl}
                       featured={false}
-                      href="/builds/new"
+                      href="/builds"
                       prominent={true}
                     />
                   </div>

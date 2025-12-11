@@ -1,3 +1,4 @@
+import Builder from "@/components/Builder"
 import { BuildProgress } from "@/components/BuildProgress"
 import { GiscusComments } from "@/components/GiscusComments"
 import { api } from "@/convex/_generated/api"
@@ -6,28 +7,26 @@ import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { usePageContext } from "vike-react/usePageContext"
 
-export default function BuildProgressPage() {
+export default function BuildsPage() {
   const pageContext = usePageContext()
-  const buildHash = pageContext.routeParams?.buildHash as string | undefined
-  const build = useQuery(api.builds.getByHash, buildHash ? { buildHash } : "skip")
+  const urlSearchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
+  const cloneHash = urlSearchParams?.get("clone")
+  const buildId = urlSearchParams?.get("id")
+  const pluginParam = urlSearchParams?.get("plugin")
+
+  // If we have a build ID, show the build progress page
+  if (buildId) {
+    return <BuildViewPage buildHash={buildId} />
+  }
+
+  // Otherwise, show the builder (handles clone and plugin params)
+  return <Builder cloneHash={cloneHash || undefined} pluginParam={pluginParam || undefined} />
+}
+
+function BuildViewPage({ buildHash }: { buildHash: string }) {
+  const build = useQuery(api.builds.getByHash, { buildHash })
   const isAdmin = useQuery(api.admin.isAdmin)
   const retryBuild = useMutation(api.admin.retryBuild)
-
-  if (!buildHash) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-slate-300">
-            Build hash missing.{" "}
-            <a href="/builds/new" className="text-cyan-400">
-              Start a new build
-            </a>
-            .
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   if (build === undefined) {
     return (

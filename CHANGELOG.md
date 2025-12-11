@@ -13,10 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored targets.ts to use vendors.json and architecture-hierarchy.json instead of hardware-list.json
 - Updated architecture-hierarchy.json generation to use actual PlatformIO environment names (removed normalization)
 - Removed normalization from lib/utils.ts since all inputs now use standardized PlatformIO names
+- Refactored build routes from dynamic parameterized routes to query string parameters for Vike SSG compatibility
 
 ### Patch
 
 - Fix Convex server functions being imported in browser by moving ArtifactType enum to client-safe location
+- Fix nested anchor tag hydration error in PluginCard component by converting nested links to buttons when parent is a link
 
 ## [0.3.0] - 2025-12-10
 

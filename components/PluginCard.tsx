@@ -205,42 +205,87 @@ export function PluginCard(props: PluginCardProps) {
                 <span>{downloads.toLocaleString()}</span>
               </div>
             )}
-            {homepage && homepage !== repo && (isLink || isLinkToggle) && (
-              <a
-                href={homepage}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="hover:opacity-80 transition-opacity"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  className="text-slate-400"
-                  fill="currentColor"
-                  role="img"
+            {homepage &&
+              homepage !== repo &&
+              (isLink || isLinkToggle) &&
+              (isLink ? (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    window.open(homepage, "_blank", "noopener,noreferrer")
+                  }}
+                  className="hover:opacity-80 transition-opacity"
                   aria-label="Homepage"
                 >
-                  <path
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    className="text-slate-400"
                     fill="currentColor"
-                    d="m12 3l11 8.25l-1.2 1.6L20 11.5V21H4v-9.5l-1.8 1.35l-1.2-1.6zm-4.65 9.05q0 1.325 1.425 2.825T12 18q1.8-1.625 3.225-3.125t1.425-2.825q0-1.1-.75-1.825T14.1 9.5q-.65 0-1.188.263T12 10.45q-.375-.425-.937-.687T9.9 9.5q-1.05 0-1.8.725t-.75 1.825"
-                  />
-                </svg>
-              </a>
-            )}
-            {starsBadgeUrl && repo && (
-              <a
-                href={repo}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="hover:opacity-80 transition-opacity"
-              >
-                <img src={starsBadgeUrl} alt="GitHub stars" className="h-4" />
-              </a>
-            )}
+                    role="img"
+                    aria-label="Homepage"
+                  >
+                    <path
+                      fill="currentColor"
+                      d="m12 3l11 8.25l-1.2 1.6L20 11.5V21H4v-9.5l-1.8 1.35l-1.2-1.6zm-4.65 9.05q0 1.325 1.425 2.825T12 18q1.8-1.625 3.225-3.125t1.425-2.825q0-1.1-.75-1.825T14.1 9.5q-.65 0-1.188.263T12 10.45q-.375-.425-.937-.687T9.9 9.5q-1.05 0-1.8.725t-.75 1.825"
+                    />
+                  </svg>
+                </button>
+              ) : (
+                <a
+                  href={homepage}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    className="text-slate-400"
+                    fill="currentColor"
+                    role="img"
+                    aria-label="Homepage"
+                  >
+                    <path
+                      fill="currentColor"
+                      d="m12 3l11 8.25l-1.2 1.6L20 11.5V21H4v-9.5l-1.8 1.35l-1.2-1.6zm-4.65 9.05q0 1.325 1.425 2.825T12 18q1.8-1.625 3.225-3.125t1.425-2.825q0-1.1-.75-1.825T14.1 9.5q-.65 0-1.188.263T12 10.45q-.375-.425-.937-.687T9.9 9.5q-1.05 0-1.8.725t-.75 1.825"
+                    />
+                  </svg>
+                </a>
+              ))}
+            {starsBadgeUrl &&
+              repo &&
+              (isLink ? (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    window.open(repo, "_blank", "noopener,noreferrer")
+                  }}
+                  className="hover:opacity-80 transition-opacity"
+                  aria-label="GitHub repository"
+                >
+                  <img src={starsBadgeUrl} alt="GitHub stars" className="h-4" />
+                </button>
+              ) : (
+                <a
+                  href={repo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  <img src={starsBadgeUrl} alt="GitHub stars" className="h-4" />
+                </a>
+              ))}
           </div>
           {/* Build Now button - absolutely positioned in lower right */}
           {isLink && (
@@ -249,7 +294,7 @@ export function PluginCard(props: PluginCardProps) {
                 onClick={e => {
                   e.preventDefault()
                   e.stopPropagation()
-                  navigate(`/builds/new?plugin=${id}`)
+                  navigate(`/builds?plugin=${id}`)
                 }}
                 className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 rounded hover:bg-cyan-400/20 transition-colors cursor-pointer"
               >
@@ -287,7 +332,7 @@ export function PluginCard(props: PluginCardProps) {
   } ${isLink ? "group" : ""}`
 
   if (isLink) {
-    const href = props.href || `/builds/new?plugin=${id}`
+    const href = props.href || `/builds?plugin=${id}`
     return (
       <a href={href} className={baseClassName}>
         {cardContent}

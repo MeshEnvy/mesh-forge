@@ -132,7 +132,7 @@ export default function PluginPage() {
                 Homepage
               </Button>
             )}
-            <Button onClick={() => navigate(`/builds/new?plugin=${slug}`)} className="bg-cyan-600 hover:bg-cyan-700">
+            <Button onClick={() => navigate(`/builds?plugin=${slug}`)} className="bg-cyan-600 hover:bg-cyan-700">
               Build with this Plugin
             </Button>
           </div>

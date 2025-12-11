@@ -48,7 +48,7 @@ export function BuildProgress({ build, isAdmin = false, onRetry, showActions = t
       ? `https://github.com/MeshEnvy/mesh-forge/actions/runs/${build.githubRunId}`
       : null
 
-  const shareUrl = `${window.location.origin}/builds/new/${build.buildHash}`
+  const shareUrl = `${window.location.origin}/builds?clone=${build.buildHash}`
 
   const handleShare = async () => {
     try {
@@ -216,10 +216,10 @@ export function BuildProgress({ build, isAdmin = false, onRetry, showActions = t
               <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
                 {getStatusIcon()}
                 <a
-                  href={`/builds/${build.buildHash}`}
+                  href={`/builds?id=${build.buildHash}`}
                   onClick={e => {
                     e.preventDefault()
-                    navigate(`/builds/${build.buildHash}`)
+                    navigate(`/builds?id=${build.buildHash}`)
                   }}
                   className="hover:text-cyan-400 transition-colors"
                 >
@@ -257,7 +257,7 @@ export function BuildProgress({ build, isAdmin = false, onRetry, showActions = t
             {showActions && (
               <div className="flex gap-2">
                 <Button
-                  onClick={() => navigate(`/builds/new/${build.buildHash}`)}
+                  onClick={() => navigate(`/builds?clone=${build.buildHash}`)}
                   variant="outline"
                   className="border-slate-600 hover:bg-slate-800"
                   aria-label="Clone"
