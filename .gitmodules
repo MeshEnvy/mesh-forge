@@ -16,6 +16,3 @@
 [submodule "vendor/lofs"]
 	path = vendor/lofs
 	url = git@github.com:MeshEnvy/lofs.git
-[submodule "vendor/lofs-test"]
-	path = vendor/lofs-test
-	url = git@github.com:MeshEnvy/lofs-test.git
