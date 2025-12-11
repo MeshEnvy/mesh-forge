@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-12-10
+
 ### Minor
 
 - Added vendors.json mapping vendors to models and platformio targets
@@ -14,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated architecture-hierarchy.json generation to use actual PlatformIO environment names (removed normalization)
 - Removed normalization from lib/utils.ts since all inputs now use standardized PlatformIO names
 - Refactored build routes from dynamic parameterized routes to query string parameters for Vike SSG compatibility
+- Refactored Builder component into smaller reusable components (BuilderHeader, TargetSelector, VersionSelector, ModuleConfig, PluginConfig, BuildActions)
+- Extracted target selection and plugin compatibility logic into reusable hooks (useTargetSelection, usePluginCompatibility)
 
 ### Patch
 
@@ -48,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release
 
-[Unreleased]: https://github.com/MeshEnvy/mesh-forge/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/MeshEnvy/mesh-forge/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/MeshEnvy/mesh-forge/releases/tag/v0.4.0
 [0.3.0]: https://github.com/MeshEnvy/mesh-forge/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MeshEnvy/mesh-forge/releases/tag/v0.2.0
 [0.1.0]: https://github.com/MeshEnvy/mesh-forge/releases/tag/v0.1.0
