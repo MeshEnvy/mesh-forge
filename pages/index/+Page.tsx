@@ -111,12 +111,11 @@ export default function LandingPage() {
         <div className="text-center py-20 px-8">
           <h1 className="text-6xl md:text-7xl font-bold mb-6 leading-[1.1]">
             <span className="bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent inline-block pb-2">
-              Mesh beyond the basics
+              Mesh Apps
             </span>
           </h1>
           <p className="text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto mb-10">
-            Build custom firmware with third-party plugins: BBS's, custom hardware, games, and more. An open ecosystem
-            growing to hundreds of plugins.
+            Mesh Forge is an open ecosystem of apps, BBS's, custom hardware, games, and more.
           </p>
 
           {featuredPlugins.length > 0 && (
