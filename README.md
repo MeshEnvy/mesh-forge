@@ -18,9 +18,11 @@ Join our Discord community: [https://discord.gg/8KgJpvjfaJ](https://discord.gg/8
 
 ```bash
 # Install dependencies
+git submodule update --init --recursive
 bun install
 
 # Run development server
+npx convex dev # Note: you will need to initialize or select a Convex project
 bun run dev
 
 # Build for production
