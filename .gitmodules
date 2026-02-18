@@ -19,6 +19,3 @@
 [submodule "vendor/meshtastic-firmware"]
 	path = vendor/meshtastic-firmware
 	url = git@github.com:MeshEnvy/firmware.git
-[submodule "vendor/meshcore-firmware"]
-	path = vendor/meshcore-firmware
-	url = git@github.com:MeshEnvy/MeshCore.git
