@@ -107,3 +107,33 @@ export const logBuildDispatchError = internalMutation({
     })
   },
 })
+
+/** Re-queue a failed build (same Convex doc + webhook id) after dispatch or CI flakiness. */
+export const retryBuild = mutation({
+  args: { buildId: v.id("repoBuilds") },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.buildId)
+    if (!doc) {
+      throw new Error("Build not found")
+    }
+    if (doc.status !== "failed") {
+      throw new Error(`Cannot retry unless status is failed (got ${doc.status})`)
+    }
+
+    const now = Date.now()
+    await ctx.db.replace(args.buildId, {
+      owner: doc.owner,
+      repo: doc.repo,
+      ref: doc.ref,
+      resolvedSourceSha: doc.resolvedSourceSha,
+      targetEnv: doc.targetEnv,
+      buildKey: doc.buildKey,
+      status: "queued",
+      startedAt: now,
+      updatedAt: now,
+    })
+
+    await ctx.scheduler.runAfter(0, api.actions.dispatchRepoBuild, { buildId: args.buildId })
+    return { ok: true as const }
+  },
+})

@@ -106,8 +106,9 @@ export default function HomePage() {
         </div>
 
         <p className="text-xs text-slate-500">
-          URLs mirror GitHub: <code className="text-slate-400">/owner/repo/tree/ref</code>. Short form{' '}
-          <code className="text-slate-400">owner/repo</code> uses the default branch.
+          Repo URLs: <code className="text-slate-400">/owner/repo</code> (pick branch),{' '}
+          <code className="text-slate-400">/owner/repo/tree/ref</code>, or add{' '}
+          <code className="text-slate-400">/target/envName</code> to deep-link a PlatformIO environment.
         </p>
       </div>
     </div>

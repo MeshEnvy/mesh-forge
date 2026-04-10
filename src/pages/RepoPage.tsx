@@ -1,4 +1,4 @@
-import { AutocompleteField } from '../components/AutocompleteField'
+import { ComboboxField } from '../components/ComboboxField'
 import EspFlasher from '../components/EspFlasher'
 import { Button } from '@/components/ui/button'
 import { api } from '@/convex/_generated/api'
@@ -7,13 +7,17 @@ import { Github, Link2, RefreshCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { homepageHref, homepageLabel } from '../lib/githubHomepage'
 import ReactMarkdown from 'react-markdown'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { normalizeBuildKey } from '../lib/buildKey'
-import { formatBuildErrorSummary } from '../lib/formatBuildErrorSummary'
+import { buildFailurePresentation } from '../lib/formatBuildErrorSummary'
+
+const MESH_FORGE_ACTIONS_REPO = 'MeshEnvy/mesh-forge'
+const meshForgeWorkflowUrl = `https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/workflows/custom_build.yml`
+import { buildTreeSplatPath, parseTreeSplat } from '../lib/repoTreeUrl'
 
 export default function RepoPage() {
   const navigate = useNavigate()
@@ -23,7 +27,8 @@ export default function RepoPage() {
   const treePath = params['*']
   const owner = useMemo(() => decodeURIComponent(ownerParam), [ownerParam])
   const repo = useMemo(() => decodeURIComponent(repoParam), [repoParam])
-  const onShortUrl = !treePath
+  const { branchRef, targetEnv: targetFromUrl } = useMemo(() => parseTreeSplat(treePath), [treePath])
+  const hasBranch = Boolean(branchRef)
 
   const branchData = useQuery(
     api.repoBranches.get,
@@ -34,17 +39,10 @@ export default function RepoPage() {
   const fetchReadme = useAction(api.repoBranches.fetchReadme)
   const ensureScan = useMutation(api.repoScans.ensureScan)
   const ensureBuild = useMutation(api.repoBuilds.ensureBuild)
+  const retryBuild = useMutation(api.repoBuilds.retryBuild)
   const getSignedUrl = useAction(api.repoBuildDownloads.getSignedDownloadUrl)
-  const effectiveRef = useMemo(() => {
-    if (treePath) {
-      return treePath
-        .split('/')
-        .filter(Boolean)
-        .map(p => decodeURIComponent(p))
-        .join('/')
-    }
-    return branchData?.row?.defaultBranch ?? null
-  }, [treePath, branchData?.row?.defaultBranch])
+  /** Git branch/ref from URL only (null = `--branch--` / short `/owner/repo`). */
+  const effectiveRef = branchRef
 
   useEffect(() => {
     if (!owner || !repo || branchData === undefined) return
@@ -101,27 +99,35 @@ export default function RepoPage() {
   }, [owner, repo, effectiveRef, fetchReadme])
 
   const envNames = scan?.scanStatus === 'complete' ? scan.envNames ?? [] : []
-  const [selectedEnv, setSelectedEnv] = useState<string>('')
-  useEffect(() => {
-    if (!envNames.length) return
-    if (!selectedEnv || !envNames.includes(selectedEnv)) {
-      setSelectedEnv(envNames[0])
-    }
-  }, [envNames, selectedEnv])
+  const resolvedTargetEnv =
+    hasBranch && targetFromUrl && envNames.length > 0 && envNames.includes(targetFromUrl)
+      ? targetFromUrl
+      : ''
 
   const [branchDraft, setBranchDraft] = useState('')
   useEffect(() => {
-    if (!effectiveRef) return
-    setBranchDraft(effectiveRef)
-  }, [effectiveRef])
+    setBranchDraft(branchRef ?? '')
+  }, [branchRef])
 
   const [envDraft, setEnvDraft] = useState('')
   useEffect(() => {
-    if (selectedEnv) setEnvDraft(selectedEnv)
-  }, [selectedEnv])
+    if (!hasBranch) {
+      setEnvDraft('')
+      return
+    }
+    setEnvDraft(targetFromUrl ?? '')
+  }, [hasBranch, targetFromUrl])
+
+  useEffect(() => {
+    if (!branchRef || !targetFromUrl) return
+    if (scan?.scanStatus !== 'complete') return
+    if (envNames.length === 0 || !envNames.includes(targetFromUrl)) {
+      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(branchRef, null)}`, { replace: true })
+    }
+  }, [branchRef, targetFromUrl, envNames, scan?.scanStatus, navigate, ownerParam, repoParam])
 
   const buildKey =
-    resolvedSha && selectedEnv ? normalizeBuildKey(resolvedSha, selectedEnv) : null
+    resolvedSha && resolvedTargetEnv ? normalizeBuildKey(resolvedSha, resolvedTargetEnv) : null
   const build = useQuery(api.repoBuilds.getByBuildKey, buildKey ? { buildKey } : 'skip')
 
   const [flashUrl, setFlashUrl] = useState<string | null>(null)
@@ -153,13 +159,19 @@ export default function RepoPage() {
   }, [build?._id, build?.status, getSignedUrl])
 
   const queueFlashArtifacts = () => {
-    if (!effectiveRef || !resolvedSha || !selectedEnv) return
+    if (!effectiveRef || !resolvedSha || !resolvedTargetEnv) return
+    if (build?.status === 'failed' && build._id) {
+      void retryBuild({ buildId: build._id })
+        .then(() => toast.message('Re-queued build'))
+        .catch(e => toast.error(String(e)))
+      return
+    }
     void ensureBuild({
       owner,
       repo,
       ref: effectiveRef,
       resolvedSourceSha: resolvedSha,
-      targetEnv: selectedEnv,
+      targetEnv: resolvedTargetEnv,
     }).catch(e => toast.error(String(e)))
   }
 
@@ -173,103 +185,108 @@ export default function RepoPage() {
     }
   }
 
-  if (onShortUrl) {
-    if (branchData === undefined) {
-      return (
-        <div className="min-h-[40vh] flex items-center justify-center text-slate-400">
-          Resolving default branch…
-        </div>
-      )
-    }
-    if (!branchData.row) {
-      return (
-        <div className="max-w-xl mx-auto px-6 py-16 text-slate-300">
-          <p className="mb-4">Could not load branch list. The repository may be private or missing.</p>
-          <Button asChild variant="outline">
-            <Link to="/">Home</Link>
-          </Button>
-        </div>
-      )
-    }
-    const enc = branchData.row.defaultBranch.split('/').map(encodeURIComponent).join('/')
-    return <Navigate to={`/${ownerParam}/${repoParam}/tree/${enc}`} replace />
-  }
-
-  if (!effectiveRef) {
+  if (branchData === undefined) {
     return (
-      <div className="min-h-[40vh] flex items-center justify-center text-slate-400">Loading…</div>
+      <div className="min-h-[40vh] flex items-center justify-center text-slate-400">Loading repository…</div>
+    )
+  }
+  if (!branchData.row) {
+    return (
+      <div className="max-w-xl mx-auto px-6 py-16 text-slate-300">
+        <p className="mb-4">Could not load branch list. The repository may be private or missing.</p>
+        <Button asChild variant="outline">
+          <Link to="/">Home</Link>
+        </Button>
+      </div>
     )
   }
 
-  const ghTree = `https://github.com/${owner}/${repo}/tree/${effectiveRef.split('/').map(encodeURIComponent).join('/')}`
+  const ghRepoRoot = `https://github.com/${owner}/${repo}`
+  const ghTree = effectiveRef
+    ? `https://github.com/${owner}/${repo}/tree/${effectiveRef.split('/').map(encodeURIComponent).join('/')}`
+    : ghRepoRoot
 
-  const branchNames = branchData?.row?.branches.map(b => b.name) ?? []
+  const branchNames = branchData.row.branches.map(b => b.name)
   let branchOptions =
-    effectiveRef && !branchNames.includes(effectiveRef)
-      ? [effectiveRef, ...branchNames]
-      : [...branchNames]
-  if (branchOptions.length === 0 && effectiveRef) branchOptions = [effectiveRef]
+    branchRef && !branchNames.includes(branchRef) ? [branchRef, ...branchNames] : [...branchNames]
+  if (branchOptions.length === 0 && branchRef) branchOptions = [branchRef]
 
-  const ghAboutDescription = branchData?.row?.description?.trim() ?? ''
-  const ghAboutHomepage = branchData?.row?.homepage?.trim() ?? ''
+  const ghAboutDescription = branchData.row.description?.trim() ?? ''
+  const ghAboutHomepage = branchData.row.homepage?.trim() ?? ''
 
-  const scanReady = Boolean(resolvedSha && scan?.scanStatus === 'complete' && envNames.length > 0)
+  const scanReady = Boolean(hasBranch && resolvedSha && scan?.scanStatus === 'complete' && envNames.length > 0)
+  const buildInProgress = Boolean(build && (build.status === 'queued' || build.status === 'running'))
   const flashPrimaryDisabled =
+    !hasBranch ||
     !resolvedSha ||
     Boolean(refError) ||
-    !selectedEnv ||
-    !envNames.includes(selectedEnv) ||
-    !scanReady
+    !resolvedTargetEnv ||
+    !envNames.includes(resolvedTargetEnv) ||
+    !scanReady ||
+    buildInProgress
 
-  const ghRepoRoot = `https://github.com/${owner}/${repo}`
+  const flashButtonLabel =
+    build?.status === 'failed' ? 'Retry build' : buildInProgress ? 'Building…' : 'Flash'
 
-  const targetPlaceholder = !resolvedSha
-    ? '…'
-    : scan == null || scan.scanStatus === 'in_progress'
-      ? 'Scanning…'
-      : scan.scanStatus === 'failed'
-        ? 'Scan failed'
-        : envNames.length === 0
-          ? 'No targets'
-          : 'Pick env…'
+  const targetPlaceholder = !hasBranch
+    ? '--target--'
+    : !resolvedSha
+      ? '…'
+      : scan == null || scan.scanStatus === 'in_progress'
+        ? 'Scanning…'
+        : scan.scanStatus === 'failed'
+          ? 'Scan failed'
+          : envNames.length === 0
+            ? 'No targets'
+            : '--target--'
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 text-slate-200">
       <section className="rounded-2xl border border-slate-700/90 bg-slate-950/90 p-6 md:p-8 shadow-xl shadow-black/30">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10 items-start">
-          <div className="min-w-0 space-y-5 order-2 lg:order-1">
+          <div className="min-w-0 space-y-5 order-1">
             <div className="flex flex-nowrap items-end gap-2 overflow-x-auto border-b border-slate-800 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <AutocompleteField
+              <ComboboxField
                 label="Branch"
                 layout="inline"
                 id="mesh-forge-branch"
                 options={branchOptions}
                 value={branchDraft}
+                placeholder="--branch--"
+                clearSelectionLabel="Clear branch"
                 onChange={v => {
                   setBranchDraft(v)
-                  if (branchOptions.includes(v)) {
-                    const enc = v.split('/').map(encodeURIComponent).join('/')
-                    navigate(`/${ownerParam}/${repoParam}/tree/${enc}`)
+                  if (v === '') {
+                    navigate(`/${ownerParam}/${repoParam}`)
+                    return
                   }
-                }}
-                onBlur={() => {
-                  if (!branchOptions.includes(branchDraft)) setBranchDraft(effectiveRef)
+                  if (branchOptions.includes(v)) {
+                    navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, null)}`)
+                  }
                 }}
                 disabled={branchOptions.length === 0}
               />
-              {scanReady && envNames.length > 0 ? (
-                <AutocompleteField
+              {hasBranch && scanReady && envNames.length > 0 ? (
+                <ComboboxField
                   label="Target"
                   layout="inline"
                   id="mesh-forge-target"
                   options={envNames}
                   value={envDraft}
+                  placeholder="--target--"
+                  clearSelectionLabel="Clear target"
                   onChange={v => {
                     setEnvDraft(v)
-                    if (envNames.includes(v)) setSelectedEnv(v)
-                  }}
-                  onBlur={() => {
-                    if (!envNames.includes(envDraft)) setEnvDraft(selectedEnv)
+                    if (!branchRef) return
+                    if (v === '') {
+                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(branchRef, null)}`, {
+                        replace: true,
+                      })
+                      return
+                    }
+                    if (envNames.includes(v)) {
+                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(branchRef, v)}`)
+                    }
                   }}
                   disabled={false}
                 />
@@ -279,10 +296,10 @@ export default function RepoPage() {
                   <input
                     type="text"
                     readOnly
-                    disabled
+                    disabled={!hasBranch}
                     value=""
                     placeholder={targetPlaceholder}
-                    className="h-9 min-w-[7rem] flex-1 cursor-not-allowed rounded-md border border-slate-800 bg-slate-900/50 px-2.5 text-sm text-slate-500 placeholder:text-slate-600"
+                    className="h-9 min-w-28 flex-1 cursor-not-allowed rounded-md border border-slate-800 bg-slate-900/50 px-2.5 text-sm text-slate-500 placeholder:text-slate-600"
                   />
                 </label>
               )}
@@ -293,14 +310,14 @@ export default function RepoPage() {
                 disabled={flashPrimaryDisabled}
                 onClick={queueFlashArtifacts}
               >
-                Flash
+                {flashButtonLabel}
               </Button>
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
               {branchData?.isStale ? <span>Branch list may be stale.</span> : null}
               {refError ? <span className="text-red-400">{refError}</span> : null}
-              {!refError && !resolvedSha ? <span>Resolving branch…</span> : null}
+              {!refError && hasBranch && !resolvedSha ? <span>Resolving branch…</span> : null}
               {resolvedSha && (scan == null || scan.scanStatus === 'in_progress') ? (
                 <span>Scanning PlatformIO…</span>
               ) : null}
@@ -318,16 +335,46 @@ export default function RepoPage() {
                     {build.githubRunId ? (
                       <a
                         className="text-cyan-400 hover:underline text-xs"
-                        href={`https://github.com/MeshEnvy/mesh-forge/actions/runs/${build.githubRunId}`}
+                        href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Workflow run
+                        View run on GitHub
+                      </a>
+                    ) : build.status === 'failed' ? (
+                      <a
+                        className="text-cyan-400 hover:underline text-xs"
+                        href={meshForgeWorkflowUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the Mesh Forge workflow to fix YAML or inspect recent runs."
+                      >
+                        Mesh Forge workflow on GitHub
                       </a>
                     ) : null}
                   </div>
                   {build.status === 'failed' && build.errorSummary ? (
-                    <p className="text-red-300 text-xs whitespace-pre-wrap">{formatBuildErrorSummary(build.errorSummary)}</p>
+                    <div className="space-y-2 text-xs">
+                      {(() => {
+                        const { headline, body } = buildFailurePresentation(build.errorSummary)
+                        return (
+                          <>
+                            <p className="font-medium text-slate-200">{headline}</p>
+                            {body ? <p className="text-slate-400 leading-relaxed">{body}</p> : null}
+                            <details className="text-slate-500">
+                              <summary className="cursor-pointer select-none hover:text-slate-400">
+                                Technical details
+                              </summary>
+                              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
+                                {build.errorSummary.length > 2500
+                                  ? `${build.errorSummary.slice(0, 2500)}…`
+                                  : build.errorSummary}
+                              </pre>
+                            </details>
+                          </>
+                        )
+                      })()}
+                    </div>
                   ) : null}
                   {build.status === 'succeeded' ? (
                     <Button type="button" size="sm" variant="secondary" onClick={() => void download()}>
@@ -356,7 +403,9 @@ export default function RepoPage() {
             </div>
 
             <div className="mt-8 prose prose-invert prose-sm max-w-none prose-hr:my-6">
-              {readmeMd === null ? (
+              {!effectiveRef ? (
+                <p className="text-slate-500 not-prose text-sm">Select a branch to load the README.</p>
+              ) : readmeMd === null ? (
                 <p className="text-slate-500 not-prose">Loading…</p>
               ) : (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
@@ -366,7 +415,7 @@ export default function RepoPage() {
             </div>
           </div>
 
-          <aside className="order-1 border-b border-slate-800 pb-8 lg:order-2 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
+          <aside className="order-2 border-b border-slate-800 pb-8 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
             <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">About</h2>
             <div>
               <p className="text-xs text-slate-500 mb-1">{owner}</p>
@@ -380,17 +429,17 @@ export default function RepoPage() {
                     href={ghTree}
                     target="_blank"
                     rel="noreferrer"
-                    title={`View ${effectiveRef} on GitHub`}
+                    title={effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
                   >
                     <Github className="size-4" aria-hidden />
-                    <span className="sr-only">View {effectiveRef} on GitHub</span>
+                    <span className="sr-only">
+                      {effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
+                    </span>
                   </a>
                 ) : null}
               </h3>
             </div>
-            {branchData === undefined ? (
-              <p className="text-sm text-slate-500">Loading…</p>
-            ) : ghAboutDescription ? (
+            {ghAboutDescription ? (
               <p className="text-sm text-slate-200 leading-relaxed">{ghAboutDescription}</p>
             ) : null}
             {ghAboutHomepage ? (
@@ -409,10 +458,12 @@ export default function RepoPage() {
                   href={ghTree}
                   target="_blank"
                   rel="noreferrer"
-                  title={`View ${effectiveRef} on GitHub`}
+                  title={effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
                 >
                   <Github className="size-4" aria-hidden />
-                  <span className="sr-only">View {effectiveRef} on GitHub</span>
+                  <span className="sr-only">
+                    {effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
+                  </span>
                 </a>
               </div>
             ) : null}

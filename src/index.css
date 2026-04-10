@@ -1,5 +1,10 @@
-@import "tailwindcss";
+/* Disable auto scan of the whole repo root — `vendor/` alone is ~100k+ files and stalls the Oxide scanner. */
+@import "tailwindcss" source(none);
 @plugin "@tailwindcss/typography";
+
+@source "./**/*.{html,js,mjs,mts,ts,tsx,jsx}";
+@source "../components/**/*.{html,js,mjs,mts,ts,tsx,jsx}";
+@source "../index.html";
 
 @theme {
   --font-sans: system-ui, -apple-system, sans-serif;
