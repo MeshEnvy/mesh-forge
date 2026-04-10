@@ -1,7 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { ChevronDown } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 type Row = { kind: 'clear' } | { kind: 'opt'; value: string }
 
@@ -45,6 +45,12 @@ function buildRows(
   return r
 }
 
+function rowIndexForValue(rows: Row[], value: string): number {
+  if (!value) return -1
+  const lower = value.toLowerCase()
+  return rows.findIndex(row => row.kind === 'opt' && (row.value === value || row.value.toLowerCase() === lower))
+}
+
 /**
  * Searchable list combobox (Radix Popover). Unlike `<datalist>`, the full option list stays
  * available while open so arrow keys and scrolling work after a value is selected.
@@ -69,6 +75,7 @@ export function ComboboxField({
   const [highlighted, setHighlighted] = useState(0)
   const filterInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const syncHighlightAfterOpenRef = useRef(false)
 
   const rows = useMemo(
     () => buildRows(options, filter, clearSelectionLabel, value, filterNormalize),
@@ -77,19 +84,28 @@ export function ComboboxField({
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
+      syncHighlightAfterOpenRef.current = true
       setFilter('')
-      const initial = buildRows(options, '', clearSelectionLabel, value, filterNormalize)
-      const idx = initial.findIndex(row => row.kind === 'opt' && row.value === value)
-      setHighlighted(idx >= 0 ? idx : 0)
     } else {
       setFilter('')
     }
     setOpen(next)
   }
 
+  /** Sync list highlight to current value before paint; avoids stale index + clamp fighting selection. */
+  useLayoutEffect(() => {
+    if (!open || !syncHighlightAfterOpenRef.current) return
+    syncHighlightAfterOpenRef.current = false
+    const idx = rowIndexForValue(rows, value)
+    setHighlighted(idx >= 0 ? idx : 0)
+  }, [open, rows, value])
+
   useEffect(() => {
     if (!open) return
-    setHighlighted(h => Math.min(h, Math.max(0, rows.length - 1)))
+    setHighlighted(h => {
+      const max = Math.max(0, rows.length - 1)
+      return h > max ? max : h
+    })
   }, [rows.length, open])
 
   useEffect(() => {
