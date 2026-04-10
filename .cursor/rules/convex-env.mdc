@@ -25,7 +25,7 @@ These names are configured in the Convex dashboard for this project. **Do not pu
 ## CI / GitHub integration
 
 - `GITHUB_TOKEN` — GitHub API (repo scans, branches, dispatching `custom_build*.yml`)
-- `CONVEX_ENV` — e.g. `dev` selects `custom_build_test.yml` for workflow dispatch
+- `CONVEX_ENV` — when `dev`, workflow dispatch uses **`custom_build_test.yml`** on git ref **`v2`** on `MeshEnvy/mesh-forge`; otherwise **`custom_build.yml`** on **`main`**
 - `CONVEX_BUILD_TOKEN` — shared with GitHub Actions secret of the same name; bearer auth for `POST /ingest-repo-build`
 
 ## R2 (firmware artifacts / signed downloads)

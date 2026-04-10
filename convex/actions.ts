@@ -24,9 +24,10 @@ export const dispatchRepoBuild = action({
 
     const isDev = process.env.CONVEX_ENV === "dev"
     const workflowFile = isDev ? "custom_build_test.yml" : "custom_build.yml"
+    const workflowRef = isDev ? "v2" : "main"
 
     const payload = {
-      ref: "main",
+      ref: workflowRef,
       inputs: {
         owner: doc.owner,
         repo: doc.repo,
