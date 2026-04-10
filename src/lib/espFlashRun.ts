@@ -13,6 +13,21 @@ export const noopEspTerminal: EspTerminal = {
   writeLine: () => {},
 }
 
+/** Forwards loader output to the browser console (in addition to `inner`). */
+function espTerminalWithConsoleLog(inner: EspTerminal): EspTerminal {
+  return {
+    clean: () => inner.clean(),
+    write: data => {
+      console.log(`[esptool] ${data}`)
+      inner.write(data)
+    },
+    writeLine: data => {
+      console.log(`[esptool] ${data}`)
+      inner.writeLine(data)
+    },
+  }
+}
+
 export function isSerialUserCancelledError(e: unknown): boolean {
   if (e instanceof DOMException && e.name === "NotFoundError") return true
   const msg = e instanceof Error ? e.message : String(e)
@@ -121,19 +136,27 @@ export async function runEspFlash(options: {
   const loader = new ESPLoader({
     transport,
     baudrate: baud,
-    terminal,
+    terminal: espTerminalWithConsoleLog(terminal),
   })
 
   const fileArray = parts.map(p => ({ data: p.data, address: p.address }))
   const lengths = fileArray.map(f => f.data.byteLength)
   const totalBytes = lengths.reduce((a, b) => a + b, 0)
 
-  onPhase?.("connect")
-  await loader.main(resetMode)
-  onPhase?.("detect")
-  const flashSize = (await loader.detectFlashSize()) as FlashSizeValues
+  const emitPhase = (phase: FlashPhase) => {
+    console.log(`[esptool] phase: ${phase}`)
+    onPhase?.(phase)
+  }
 
-  onPhase?.("write")
+  emitPhase("connect")
+  await loader.main(resetMode)
+  emitPhase("detect")
+  const flashSize = (await loader.detectFlashSize()) as FlashSizeValues
+  console.log(`[esptool] flash size: ${flashSize}`)
+
+  emitPhase("write")
+  let lastProgressLogImage = -1
+  let lastProgressLogDecile = -1
   await loader.writeFlash({
     fileArray,
     flashMode: "dio",
@@ -152,6 +175,15 @@ export async function runEspFlash(options: {
         total,
         overallPct,
       })
+      const decile = Math.min(9, Math.floor(overallPct / 10))
+      const imageDone = written >= total
+      if (i !== lastProgressLogImage || decile !== lastProgressLogDecile || imageDone) {
+        lastProgressLogImage = i
+        lastProgressLogDecile = decile
+        console.log(
+          `[esptool] flash image ${i + 1}/${fileArray.length}: ${written}/${total} bytes (${overallPct}% overall)`
+        )
+      }
     },
   })
 
