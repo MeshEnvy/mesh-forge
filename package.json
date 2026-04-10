@@ -25,7 +25,7 @@
     "@aws-sdk/s3-request-presigner": "^3.937.0",
     "@convex-dev/auth": "^0.0.90",
     "@radix-ui/react-popover": "^1.1.15",
-    "convex": "^1.29.3",
+    "convex": "^1.35.1",
     "convex-helpers": "^0.1.106",
     "esptool-js": "^0.6.0",
     "fflate": "^0.8.2",
