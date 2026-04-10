@@ -2,6 +2,15 @@ import { findInTar, parseFlashManifest, type FlashManifest } from './untarGz'
 
 export type FlashPart = { data: Uint8Array; address: number; name: string }
 
+export type BuildFlashPartsOptions = {
+  /** When false, manifest rows with optional:true are omitted. */
+  eraseAll?: boolean
+}
+
+function sortFlashParts(parts: FlashPart[]): FlashPart[] {
+  return [...parts].sort((a, b) => a.address - b.address)
+}
+
 function tarBasename(path: string): string {
   const parts = path.replace(/^\.\//, '').split('/')
   return parts[parts.length - 1] ?? path
@@ -42,11 +51,19 @@ function resolveVersionedFirmwareApp(
 }
 
 export function layoutPreviewFromManifest(m: FlashManifest): string[] {
-  return m.images.map(im => `${im.file} @ ${String(im.offset)}`)
+  return m.images.map(im => {
+    const tag = im.optional ? ' — optional unless full chip erase' : ''
+    return `${im.file} @ ${String(im.offset)}${tag}`
+  })
 }
 
 /** Build ordered flash parts from a flat map (tar paths or bare filenames → bytes). */
-export function buildFlashParts(files: Map<string, Uint8Array>): FlashPart[] | null {
+export function buildFlashParts(
+  files: Map<string, Uint8Array>,
+  options: BuildFlashPartsOptions = {}
+): FlashPart[] | null {
+  const eraseAll = options.eraseAll ?? false
+
   const manifestRaw = findInTar(files, 'flash-manifest.json')
   if (manifestRaw) {
     const text = new TextDecoder().decode(manifestRaw)
@@ -54,13 +71,14 @@ export function buildFlashParts(files: Map<string, Uint8Array>): FlashPart[] | n
     if (m) {
       const out: FlashPart[] = []
       for (const img of m.images) {
+        if (!eraseAll && img.optional === true) continue
         const data = findInTar(files, img.file)
         if (!data) return null
         const addr = typeof img.offset === 'string' ? parseInt(img.offset, 0) : Number(img.offset)
         if (!Number.isFinite(addr)) return null
         out.push({ data, address: addr, name: img.file })
       }
-      if (out.length) return out
+      if (out.length) return sortFlashParts(out)
     }
   }
 
@@ -91,7 +109,7 @@ export function buildFlashParts(files: Map<string, Uint8Array>): FlashPart[] | n
       { data: app, address: 0x10000, name: appName },
     ]
     if (bootApp0) arr.push({ data: bootApp0, address: 0xe000, name: 'boot_app0.bin' })
-    return arr
+    return sortFlashParts(arr)
   }
 
   if (app && appName && !bootloader && !partitions) {

@@ -36,6 +36,8 @@ jobs:
       REPO_BUILD_ID: ${{ inputs.repo_build_id }}
       CONVEX_BUILD_TOKEN: ${{ secrets.CONVEX_BUILD_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Notify Convex — running
         shell: bash
         run: |
@@ -85,6 +87,7 @@ jobs:
             echo "Build output directory missing"
             exit 1
           fi
+          python3 "${{ github.workspace }}/scripts/emit-flash-manifest.py" "$ROOT/$BUILD_DIR"
           ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
           STAGE=/tmp/fw-bundle
           rm -rf "$STAGE"

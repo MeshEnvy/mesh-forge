@@ -45,7 +45,13 @@ export function findInTar(files: Map<string, Uint8Array>, filename: string): Uin
   return undefined
 }
 
-export type FlashManifestImage = { file: string; offset: number | string }
+export type FlashManifestImage = {
+  file: string
+  offset: number | string
+  /** When true, Mesh Forge skips this image unless the user enables full chip erase. */
+  optional?: boolean
+  role?: string
+}
 
 export type FlashManifest = { images: FlashManifestImage[] }
 
