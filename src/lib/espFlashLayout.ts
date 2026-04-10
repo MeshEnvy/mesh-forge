@@ -1,6 +1,19 @@
-import { findInTar, parseFlashManifest, type FlashManifest } from './untarGz'
+import { findInTar, parseFlashManifest, type FlashManifest, type FlashManifestImage } from './untarGz'
 
 export type FlashPart = { data: Uint8Array; address: number; name: string }
+
+export type FlashInstallPlanRow = {
+  file: string
+  offset: number
+  offsetHex: string
+  optional: boolean
+  willInstall: boolean
+}
+
+function manifestImageOffset(im: FlashManifestImage): number | null {
+  const addr = typeof im.offset === 'string' ? parseInt(im.offset, 0) : Number(im.offset)
+  return Number.isFinite(addr) ? addr : null
+}
 
 export type BuildFlashPartsOptions = {
   /** When false, manifest rows with optional:true are omitted. */
@@ -50,11 +63,23 @@ function resolveVersionedFirmwareApp(
   return undefined
 }
 
-export function layoutPreviewFromManifest(m: FlashManifest): string[] {
-  return m.images.map(im => {
-    const tag = im.optional ? ' — optional unless full chip erase' : ''
-    return `${im.file} @ ${String(im.offset)}${tag}`
-  })
+/** Sorted install plan for UI; `willInstall` matches `buildFlashParts` optional + eraseAll rules. */
+export function flashInstallRowsFromManifest(m: FlashManifest, eraseAll: boolean): FlashInstallPlanRow[] {
+  const rows: FlashInstallPlanRow[] = []
+  for (const im of m.images) {
+    const offset = manifestImageOffset(im)
+    if (offset === null) continue
+    const optional = im.optional === true
+    const willInstall = !optional || eraseAll
+    rows.push({
+      file: im.file,
+      offset,
+      offsetHex: `0x${offset.toString(16)}`,
+      optional,
+      willInstall,
+    })
+  }
+  return rows.sort((a, b) => a.offset - b.offset)
 }
 
 /** Build ordered flash parts from a flat map (tar paths or bare filenames → bytes). */

@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button"
-import { CheckCircle2 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { Check, CheckCircle2, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { buildFlashParts, layoutPreviewFromManifest, manifestFromMap } from "../lib/espFlashLayout"
+import { buildFlashParts, flashInstallRowsFromManifest, manifestFromMap } from "../lib/espFlashLayout"
 import {
   ensureSerialPortClosed,
   isSerialUserCancelledError,
@@ -20,7 +20,7 @@ type FlashProgress =
   | { kind: "complete" }
 
 const PHASE_LABEL: Record<FlashPhase, string> = {
-  connect: "Connecting to bootloader…",
+  connect: "Connecting to ROM bootloader…",
   detect: "Detecting flash size…",
   write: "Writing firmware…",
 }
@@ -62,15 +62,14 @@ export default function EspFlasher({
 }: EspFlasherProps) {
   const [busy, setBusy] = useState(false)
   const [eraseAll, setEraseAll] = useState(false)
-  const [noReset, setNoReset] = useState(false)
   const [baud, setBaud] = useState(921600)
   const [layoutPreview, setLayoutPreview] = useState<FlashManifest | null>(null)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
   const [bundleLoadError, setBundleLoadError] = useState<string | null>(null)
-  const [dfuTouchComplete, setDfuTouchComplete] = useState(false)
+  const [dfuPulsedOnce, setDfuPulsedOnce] = useState(false)
 
   useEffect(() => {
-    setDfuTouchComplete(false)
+    setDfuPulsedOnce(false)
     setLayoutPreview(null)
     setBundleLoadError(null)
     let cancelled = false
@@ -103,6 +102,11 @@ export default function EspFlasher({
   const flashBlockedReason = unsupportedFlashMessage(resolvedFamily)
   const canEspFlash = flashBlockedReason === null
 
+  const installPlanRows = useMemo(
+    () => (layoutPreview ? flashInstallRowsFromManifest(layoutPreview, eraseAll) : []),
+    [layoutPreview, eraseAll]
+  )
+
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
     if (!res.ok) throw new Error(`Download failed: ${res.status}`)
@@ -130,7 +134,7 @@ export default function EspFlasher({
       port = await navigator.serial.requestPort()
       setFlashProgress({ kind: "indeterminate", label: "Downloading firmware…" })
       const files = await prepareBundle()
-      const parts = buildFlashParts(files)
+      const parts = buildFlashParts(files, { eraseAll })
       if (!parts) {
         toast.error("Could not detect flash layout from bundle")
         return
@@ -141,7 +145,6 @@ export default function EspFlasher({
         parts,
         baud,
         eraseAll,
-        resetMode: noReset ? "no_reset" : "default_reset",
         onPhase: phase => {
           setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
         },
@@ -171,15 +174,15 @@ export default function EspFlasher({
         setFlashProgress(null)
       }
     }
-  }, [baud, eraseAll, noReset, prepareBundle, canEspFlash, flashBlockedReason])
+  }, [baud, eraseAll, prepareBundle, canEspFlash, flashBlockedReason])
 
   const enterDfuMode = useCallback(async () => {
     try {
       await pulseUsbBootloaderPort()
-      setDfuTouchComplete(true)
-      toast.success("DFU / bootloader touch sent", {
+      setDfuPulsedOnce(true)
+      toast.success("1200-baud touch sent", {
         description:
-          "If the device re-enumerated, pick the bootloader port and flash. If not, hold BOOT, tap RST, then try again.",
+          "If the device re-enumerated, pick the serial port and flash. If not, hold BOOT, tap RST, then try again.",
       })
     } catch (e) {
       if (isSerialUserCancelledError(e)) {
@@ -200,8 +203,8 @@ export default function EspFlasher({
         <>
           <h3 className="text-lg font-semibold text-white">USB firmware flash (Web Serial)</h3>
           <p className="text-sm text-slate-400">
-            esptool-js for ESP32-class layouts. Put the board in bootloader if needed — use{" "}
-            <strong>Enter DFU mode</strong> for the USB CDC 1200-baud touch when supported.
+            esptool-js for ESP32-class layouts. Put the board in <strong>ROM serial-download mode</strong> if needed —
+            use <strong>Enter DFU mode</strong> for the USB CDC 1200-baud touch when supported.
           </p>
         </>
       )}
@@ -224,11 +227,47 @@ export default function EspFlasher({
       ) : null}
 
       {layoutPreview ? (
-        <ul className="text-xs font-mono text-slate-300 space-y-1">
-          {layoutPreviewFromManifest(layoutPreview).map((line, i) => (
-            <li key={i}>{line}</li>
-          ))}
-        </ul>
+        <div className="space-y-1">
+          <table className="w-full text-left text-xs font-mono text-slate-300 border border-slate-600 rounded-md overflow-hidden">
+            <thead className="bg-slate-800/80 text-slate-400">
+              <tr>
+                <th className="px-2 py-1.5 font-medium" scope="col">
+                  Image
+                </th>
+                <th className="px-2 py-1.5 font-medium w-30" scope="col">
+                  Offset
+                </th>
+                <th className="px-2 py-1.5 font-medium w-24 text-center" scope="col">
+                  Install
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {installPlanRows.map((row, i) => (
+                <tr key={`${row.offset}-${i}-${row.file}`} className="border-t border-slate-700/80">
+                  <td className="px-2 py-1.5 break-all">{row.file}</td>
+                  <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{row.offsetHex}</td>
+                  <td className="px-2 py-1.5 text-center align-middle">
+                    {row.willInstall ? (
+                      <span className="inline-flex items-center justify-center text-emerald-400" title="Will flash">
+                        <Check className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">Yes</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center justify-center text-red-400" title="Skipped (enable full chip erase)">
+                        <X className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">No</span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[11px] text-slate-500">
+            Optional images are skipped unless <span className="text-slate-400">Full chip erase</span> is checked.
+          </p>
+        </div>
       ) : (
         <p className="text-xs text-slate-500">
           Default layout: bootloader @ 0x1000, partitions @ 0x8000, app @ 0x10000, optional boot_app0 @ 0xe000—or single
@@ -260,19 +299,6 @@ export default function EspFlasher({
           />
           Full chip erase (destructive)
         </label>
-        <label className="text-sm text-slate-300 flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={noReset}
-            onChange={e => setNoReset(e.target.checked)}
-            disabled={!canEspFlash}
-          />
-          No auto-reset (hold BOOT manually)
-        </label>
-        <label className="text-sm text-slate-300 flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={dfuTouchComplete} onChange={e => setDfuTouchComplete(e.target.checked)} />
-          Bootloader touch done
-        </label>
       </div>
 
       <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
@@ -286,7 +312,7 @@ export default function EspFlasher({
           {busy ? flashBusyLabel : flashButtonLabel}
         </Button>
         <Button type="button" variant="outline" disabled={busy} onClick={() => void enterDfuMode()}>
-          {dfuTouchComplete ? "Enter DFU mode (again)" : "Enter DFU mode"}
+          {dfuPulsedOnce ? "Enter DFU mode (again)" : "Enter DFU mode"}
         </Button>
       </div>
 
