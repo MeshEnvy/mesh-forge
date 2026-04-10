@@ -98,6 +98,12 @@ jobs:
           cd "$ROOT"
           python -m pip install -q --upgrade pip
           pip install -q platformio
+          pio pkg install -e "${{ inputs.target_env }}"
+          MKLITTLEFS_BIN=$(find "$HOME/.platformio/packages" -type f -name mklittlefs 2>/dev/null | head -1)
+          if [ -n "$MKLITTLEFS_BIN" ]; then
+            export PATH="$(dirname "$MKLITTLEFS_BIN"):$PATH"
+          fi
+          command -v mklittlefs >/dev/null 2>&1 || echo "WARNING: mklittlefs not on PATH; LittleFS build may fail"
           pio run -e "${{ inputs.target_env }}" 2>&1 | tee /tmp/pio.log
           BUILD_DIR=".pio/build/${{ inputs.target_env }}"
           if [ ! -d "$BUILD_DIR" ]; then
