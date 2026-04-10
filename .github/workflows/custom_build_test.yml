@@ -82,6 +82,16 @@ jobs:
           ENC_REF=$(python3 -c "import urllib.parse,os; print(urllib.parse.quote(os.environ['REF'], safe=''))")
           curl -fsSL -o /tmp/src.zip "https://codeload.github.com/${OWNER}/${REPO}/zip/${ENC_REF}"
 
+      - name: Cache PlatformIO global store
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+          key: platformio-${{ runner.os }}-v1-${{ hashFiles('.github/workflows/custom_build.yml', '.github/workflows/custom_build_test.yml') }}
+          restore-keys: |
+            platformio-${{ runner.os }}-v1-
+
       - name: Extract and build
         id: pio
         env:
