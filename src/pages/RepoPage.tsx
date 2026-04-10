@@ -211,7 +211,7 @@ export default function RepoPage() {
   }, [sourceRef, targetFromUrl, envNames, scan?.scanStatus, navigate, ownerParam, repoParam])
 
   const buildKey = resolvedSha && resolvedTargetEnv ? normalizeBuildKey(resolvedSha, resolvedTargetEnv) : null
-  const build = useQuery(api.repoBuilds.getByBuildKey, buildKey ? { buildKey } : "skip")
+  const build = useQuery(api.repoBuilds.getByBuildKey, buildKey && isFlashView ? { buildKey } : "skip")
 
   /** Only show CI failure UI if this tab saw the build move into `failed` (not for stale failures on load). */
   const [witnessedCiFailure, setWitnessedCiFailure] = useState(false)
@@ -308,15 +308,6 @@ export default function RepoPage() {
       navigate(
         `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(effectiveRef, resolvedTargetEnv, { flash: true })}`
       )
-    if (build?.status === "failed" && build._id) {
-      void retryBuild({ buildId: build._id })
-        .then(() => {
-          toast.message("Starting a new build…")
-          goFlash()
-        })
-        .catch(e => toast.error(String(e)))
-      return
-    }
     void ensureBuild({
       owner,
       repo,
@@ -324,7 +315,13 @@ export default function RepoPage() {
       resolvedSourceSha: resolvedSha,
       targetEnv: resolvedTargetEnv,
     })
-      .then(() => {
+      .then(res => {
+        if (res.status === "failed") {
+          return retryBuild({ buildId: res.buildId }).then(() => {
+            toast.message("Starting a new build…")
+            goFlash()
+          })
+        }
         goFlash()
       })
       .catch(e => toast.error(String(e)))
@@ -387,10 +384,7 @@ export default function RepoPage() {
     Boolean(refError) ||
     !resolvedTargetEnv ||
     !envNames.includes(resolvedTargetEnv) ||
-    !scanReady ||
-    buildInProgress
-
-  const flashButtonLabel = buildInProgress ? "Building…" : "Flash"
+    !scanReady
 
   const showCiCard = build && (build.status !== "failed" || witnessedCiFailure)
 
@@ -448,10 +442,7 @@ export default function RepoPage() {
               )}
             </div>
           ) : null}
-          {!isFlashView && buildInProgress && !build.githubRunId ? (
-            <p className="text-xs text-slate-400">Waiting for workflow to start…</p>
-          ) : null}
-          {isFlashView && buildInProgress ? (
+          {buildInProgress ? (
             <div className="space-y-2 pt-1">
               {(() => {
                 const step = build.ciProgressStep
@@ -624,11 +615,11 @@ export default function RepoPage() {
                 <Button
                   type="button"
                   className="h-9 shrink-0 bg-amber-600 px-4 text-white hover:bg-amber-700"
-                  disabled={flashPrimaryDisabled}
-                  onClick={queueFlashArtifacts}
-                >
-                  {flashButtonLabel}
-                </Button>
+                disabled={flashPrimaryDisabled}
+                onClick={queueFlashArtifacts}
+              >
+                Flash
+              </Button>
               </div>
 
               {statusStripEl}
