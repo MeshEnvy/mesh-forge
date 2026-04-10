@@ -3,7 +3,15 @@ import { api } from "@/convex/_generated/api"
 import { sortTagNames } from "@/convex/lib/tagSemver"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { Github, Link2, RefreshCw } from "lucide-react"
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type AnchorHTMLAttributes,
+  type ImgHTMLAttributes,
+} from "react"
 import ReactMarkdown from "react-markdown"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import rehypeRaw from "rehype-raw"
@@ -15,6 +23,7 @@ import EspFlasher from "../components/EspFlasher"
 import { normalizeBuildKey } from "../lib/buildKey"
 import { buildFailurePresentation } from "../lib/formatBuildErrorSummary"
 import { homepageHref, homepageLabel } from "../lib/githubHomepage"
+import { resolveReadmeRelativeUrl } from "../lib/readmeAssetUrl"
 import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
 
 const MESH_FORGE_ACTIONS_REPO = "MeshEnvy/mesh-forge"
@@ -92,21 +101,57 @@ export default function RepoPage() {
   )
 
   const [readmeMd, setReadmeMd] = useState<string | null>(null)
+  const [readmeDownloadUrl, setReadmeDownloadUrl] = useState<string | null>(null)
   useEffect(() => {
-    if (!effectiveRef) return
+    if (!effectiveRef) {
+      setReadmeMd(null)
+      setReadmeDownloadUrl(null)
+      return
+    }
     let cancelled = false
     setReadmeMd(null)
+    setReadmeDownloadUrl(null)
     void fetchReadme({ owner, repo, ref: effectiveRef })
       .then(r => {
-        if (!cancelled) setReadmeMd(r.markdown)
+        if (!cancelled) {
+          setReadmeMd(r.markdown)
+          setReadmeDownloadUrl(r.readmeDownloadUrl ?? null)
+        }
       })
       .catch(() => {
-        if (!cancelled) setReadmeMd("*(README could not be loaded.)*")
+        if (!cancelled) {
+          setReadmeMd("*(README could not be loaded.)*")
+          setReadmeDownloadUrl(null)
+        }
       })
     return () => {
       cancelled = true
     }
   }, [owner, repo, effectiveRef, fetchReadme])
+
+  const readmeMarkdownComponents = useMemo(
+    () => ({
+      img: ({ src, ...props }: ImgHTMLAttributes<HTMLImageElement>) => (
+        <img {...props} src={resolveReadmeRelativeUrl(src, readmeDownloadUrl) ?? src} />
+      ),
+      a: ({ href, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => {
+        const resolved = resolveReadmeRelativeUrl(href, readmeDownloadUrl) ?? href
+        if (resolved?.startsWith("/")) {
+          return (
+            <Link to={resolved} {...props}>
+              {children}
+            </Link>
+          )
+        }
+        return (
+          <a href={resolved} target="_blank" rel="noreferrer" {...props}>
+            {children}
+          </a>
+        )
+      },
+    }),
+    [readmeDownloadUrl]
+  )
 
   const envNames = scan?.scanStatus === "complete" ? (scan.envNames ?? []) : []
   const resolvedTargetEnv =
@@ -298,9 +343,7 @@ export default function RepoPage() {
 
   const flashButtonLabel = buildInProgress ? "Building…" : "Flash"
 
-  const showCiCard =
-    build &&
-    (build.status !== "failed" || witnessedCiFailure)
+  const showCiCard = build && (build.status !== "failed" || witnessedCiFailure)
 
   const targetPlaceholder = !hasRef
     ? "--target--"
@@ -550,7 +593,11 @@ export default function RepoPage() {
             {readmeMd === null ? (
               <p className="text-slate-500 not-prose">Loading…</p>
             ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                components={readmeMarkdownComponents}
+              >
                 {readmeMd || "*No README.*"}
               </ReactMarkdown>
             )}

@@ -5,6 +5,15 @@ import { sortTagEntries, type TagEntry } from "./lib/tagSemver"
 
 const TAG_TTL_MS = 120_000
 
+function decodeBase64Utf8(b64: string): string {
+  const normalized = b64.replace(/\s/g, "")
+  if (normalized === "") return ""
+  const binary = atob(normalized)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new TextDecoder("utf-8").decode(bytes)
+}
+
 const tagEntryValidator = v.object({
   name: v.string(),
   sha: v.string(),
@@ -115,15 +124,24 @@ export const fetchReadme = action({
   handler: async (_ctx, args) => {
     const token = process.env.GITHUB_TOKEN
     const headers: Record<string, string> = {
-      Accept: "application/vnd.github.raw+json",
+      Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
     }
     if (token) headers.Authorization = `Bearer ${token}`
     const enc = encodeURIComponent(args.ref)
     const res = await fetch(`https://api.github.com/repos/${args.owner}/${args.repo}/readme?ref=${enc}`, { headers })
-    if (res.status === 404) return { markdown: "" as string, missing: true as const }
+    if (res.status === 404) return { markdown: "" as string, readmeDownloadUrl: null as null, missing: true as const }
     if (!res.ok) throw new Error(`readme: ${res.status} ${await res.text()}`)
-    const markdown = await res.text()
-    return { markdown, missing: false as const }
+    const json = (await res.json()) as {
+      content?: string
+      download_url?: string | null
+    }
+    const b64 = json.content ?? ""
+    const markdown = decodeBase64Utf8(b64)
+    return {
+      markdown,
+      readmeDownloadUrl: (json.download_url ?? null) as string | null,
+      missing: false as const,
+    }
   },
 })
