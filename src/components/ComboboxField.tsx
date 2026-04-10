@@ -16,16 +16,29 @@ type ComboboxFieldProps = {
   layout?: 'stacked' | 'inline'
   /** When set and `value` is non-empty, first row clears selection (`onChange('')`). */
   clearSelectionLabel?: string
+  /** Match by letters/digits only (case-insensitive); ignores spaces and punctuation in query and options. */
+  filterNormalize?: boolean
+}
+
+function normalizeForFilter(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
 }
 
 function buildRows(
   options: readonly string[],
   filter: string,
   clearSelectionLabel: string | undefined,
-  value: string
+  value: string,
+  filterNormalize: boolean
 ): Row[] {
-  const q = filter.trim().toLowerCase()
-  const filtered = !q ? [...options] : options.filter(o => o.toLowerCase().includes(q))
+  let filtered: readonly string[]
+  if (filterNormalize) {
+    const nq = normalizeForFilter(filter)
+    filtered = !nq ? [...options] : options.filter(o => normalizeForFilter(o).includes(nq))
+  } else {
+    const q = filter.trim().toLowerCase()
+    filtered = !q ? [...options] : options.filter(o => o.toLowerCase().includes(q))
+  }
   const r: Row[] = []
   if (clearSelectionLabel && value) r.push({ kind: 'clear' })
   for (const o of filtered) r.push({ kind: 'opt', value: o })
@@ -46,6 +59,7 @@ export function ComboboxField({
   placeholder = 'Choose…',
   layout = 'stacked',
   clearSelectionLabel,
+  filterNormalize = false,
 }: ComboboxFieldProps) {
   const rid = useId().replace(/:/g, '')
   const triggerId = id ?? `cb-${rid}`
@@ -57,14 +71,14 @@ export function ComboboxField({
   const listRef = useRef<HTMLUListElement>(null)
 
   const rows = useMemo(
-    () => buildRows(options, filter, clearSelectionLabel, value),
-    [options, filter, clearSelectionLabel, value]
+    () => buildRows(options, filter, clearSelectionLabel, value, filterNormalize),
+    [options, filter, clearSelectionLabel, value, filterNormalize]
   )
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setFilter('')
-      const initial = buildRows(options, '', clearSelectionLabel, value)
+      const initial = buildRows(options, '', clearSelectionLabel, value, filterNormalize)
       const idx = initial.findIndex(row => row.kind === 'opt' && row.value === value)
       setHighlighted(idx >= 0 ? idx : 0)
     } else {

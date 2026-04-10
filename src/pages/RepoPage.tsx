@@ -581,6 +581,7 @@ export default function RepoPage() {
                     id="mesh-forge-target"
                     options={envNames}
                     value={envDraft}
+                    filterNormalize
                     placeholder="--target--"
                     clearSelectionLabel="Clear target"
                     onChange={v => {
