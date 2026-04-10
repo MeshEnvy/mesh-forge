@@ -243,8 +243,12 @@ export default function RepoPage() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 text-slate-200">
       <section className="rounded-2xl border border-slate-700/90 bg-slate-950/90 p-6 md:p-8 shadow-xl shadow-black/30">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10 items-start">
-          <div className="min-w-0 space-y-5 order-1">
+        <div
+          className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10 items-start
+            [grid-template-areas:'repo-main''repo-aside''repo-readme']
+            lg:[grid-template-areas:'repo-main_repo-aside''repo-readme_repo-aside']"
+        >
+          <div className="min-w-0 space-y-5 [grid-area:repo-main]">
             <div className="flex flex-nowrap items-end gap-2 overflow-x-auto border-b border-slate-800 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <ComboboxField
                 label="Branch"
@@ -401,21 +405,9 @@ export default function RepoPage() {
                 />
               ) : null}
             </div>
-
-            <div className="mt-8 prose prose-invert prose-sm max-w-none prose-hr:my-6">
-              {!effectiveRef ? (
-                <p className="text-slate-500 not-prose text-sm">Select a branch to load the README.</p>
-              ) : readmeMd === null ? (
-                <p className="text-slate-500 not-prose">Loading…</p>
-              ) : (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
-                  {readmeMd || '*No README.*'}
-                </ReactMarkdown>
-              )}
-            </div>
           </div>
 
-          <aside className="order-2 border-b border-slate-800 pb-8 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
+          <aside className="[grid-area:repo-aside] border-b border-slate-800 pb-8 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
             <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">About</h2>
             <div>
               <p className="text-xs text-slate-500 mb-1">{owner}</p>
@@ -481,6 +473,18 @@ export default function RepoPage() {
               </Button>
             </div>
           </aside>
+
+          <div className="[grid-area:repo-readme] prose prose-invert prose-sm max-w-none prose-hr:my-6">
+            {!effectiveRef ? (
+              <p className="text-slate-500 not-prose text-sm">Select a branch to load the README.</p>
+            ) : readmeMd === null ? (
+              <p className="text-slate-500 not-prose">Loading…</p>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
+                {readmeMd || '*No README.*'}
+              </ReactMarkdown>
+            )}
+          </div>
         </div>
       </section>
     </div>
