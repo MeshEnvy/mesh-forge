@@ -37,10 +37,11 @@ export default function RepoPage() {
   const treePath = params["*"]
   const owner = useMemo(() => decodeURIComponent(ownerParam), [ownerParam])
   const repo = useMemo(() => decodeURIComponent(repoParam), [repoParam])
-  const { sourceRef, targetEnv: targetFromUrl, flash: flashFromUrl } = useMemo(
-    () => parseTreeSplat(treePath),
-    [treePath]
-  )
+  const {
+    sourceRef,
+    targetEnv: targetFromUrl,
+    flash: flashFromUrl,
+  } = useMemo(() => parseTreeSplat(treePath), [treePath])
   const isFlashView = flashFromUrl
   const hasRef = Boolean(sourceRef)
 
@@ -412,9 +413,7 @@ export default function RepoPage() {
       {tagData?.isStale ? <span>Tag list may be stale.</span> : null}
       {refError ? <span className="text-red-400">{refError}</span> : null}
       {!refError && hasRef && !resolvedSha ? <span>Resolving tag…</span> : null}
-      {resolvedSha && (scan == null || scan.scanStatus === "in_progress") ? (
-        <span>Scanning PlatformIO…</span>
-      ) : null}
+      {resolvedSha && (scan == null || scan.scanStatus === "in_progress") ? <span>Scanning PlatformIO…</span> : null}
       {resolvedSha && scan?.scanStatus === "failed" ? (
         <span className="text-red-300">Scan failed: {scan.scanError ?? "unknown"}</span>
       ) : null}
@@ -459,11 +458,7 @@ export default function RepoPage() {
                 const total = build.ciProgressTotal
                 const label = build.ciProgressLabel
                 const hasSteps =
-                  typeof step === "number" &&
-                  typeof total === "number" &&
-                  total > 0 &&
-                  step >= 1 &&
-                  step <= total
+                  typeof step === "number" && typeof total === "number" && total > 0 && step >= 1 && step <= total
                 const pct = hasSteps ? Math.min(100, Math.round((step / total) * 100)) : null
                 return (
                   <>
@@ -507,9 +502,7 @@ export default function RepoPage() {
                     <details className="text-slate-500">
                       <summary className="cursor-pointer select-none hover:text-slate-400">Technical details</summary>
                       <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
-                        {build.errorSummary.length > 2500
-                          ? `…${build.errorSummary.slice(-2500)}`
-                          : build.errorSummary}
+                        {build.errorSummary.length > 2500 ? `…${build.errorSummary.slice(-2500)}` : build.errorSummary}
                       </pre>
                     </details>
                   </>
@@ -534,6 +527,7 @@ export default function RepoPage() {
       {flashUrl ? (
         <EspFlasher
           bundleUrl={flashUrl}
+          targetEnv={resolvedTargetEnv}
           condensed
           flashButtonLabel="USB flash"
           flashBusyLabel="Writing…"
@@ -545,9 +539,7 @@ export default function RepoPage() {
   )
 
   return (
-    <div
-      className={`${isFlashView ? "max-w-3xl" : "max-w-6xl"} mx-auto px-6 py-10 text-slate-200`}
-    >
+    <div className={`${isFlashView ? "max-w-3xl" : "max-w-6xl"} mx-auto px-6 py-10 text-slate-200`}>
       <section className="rounded-2xl border border-slate-700/90 bg-slate-950/90 p-6 md:p-8 shadow-xl shadow-black/30">
         {isFlashView ? (
           <div className="min-w-0 space-y-5">
@@ -556,10 +548,7 @@ export default function RepoPage() {
                 {owner}/{repo}@{effectiveRef}
                 {resolvedTargetEnv ? ` ${resolvedTargetEnv}` : ""} Flasher
               </h1>
-              <Link
-                to={backToRepoPath}
-                className="inline-block text-sm text-cyan-400 hover:underline"
-              >
+              <Link to={backToRepoPath} className="inline-block text-sm text-cyan-400 hover:underline">
                 ← Repository
               </Link>
             </div>
@@ -567,93 +556,122 @@ export default function RepoPage() {
             {ciAndFlasherEl}
           </div>
         ) : (
-        <div
-          className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10 items-start
+          <div
+            className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10 items-start
             [grid-template-areas:'repo-main''repo-aside''repo-readme']
             lg:[grid-template-areas:'repo-main_repo-aside''repo-readme_repo-aside']"
-        >
-          <div className="min-w-0 space-y-5 [grid-area:repo-main]">
-            <div className="flex flex-nowrap items-end gap-2 overflow-x-auto border-b border-slate-800 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <ComboboxField
-                label="Tag"
-                layout="inline"
-                id="mesh-forge-tag"
-                options={tagOptions}
-                value={tagDraft}
-                placeholder="--tag--"
-                clearSelectionLabel="Clear tag"
-                onChange={v => {
-                  setTagDraft(v)
-                  if (v === "") {
-                    navigate(`/${ownerParam}/${repoParam}`)
-                    return
-                  }
-                  if (tagOptions.includes(v)) {
-                    navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, targetFromUrl)}`)
-                  }
-                }}
-                disabled={tagOptions.length === 0}
-              />
-              {hasRef && scanReady && envNames.length > 0 ? (
+          >
+            <div className="min-w-0 space-y-5 [grid-area:repo-main]">
+              <div className="flex flex-nowrap items-end gap-2 overflow-x-auto border-b border-slate-800 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <ComboboxField
-                  label="Target"
+                  label="Tag"
                   layout="inline"
-                  id="mesh-forge-target"
-                  options={envNames}
-                  value={envDraft}
-                  placeholder="--target--"
-                  clearSelectionLabel="Clear target"
+                  id="mesh-forge-tag"
+                  options={tagOptions}
+                  value={tagDraft}
+                  placeholder="--tag--"
+                  clearSelectionLabel="Clear tag"
                   onChange={v => {
-                    setEnvDraft(v)
-                    if (!sourceRef) return
+                    setTagDraft(v)
                     if (v === "") {
-                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null)}`, {
-                        replace: true,
-                      })
+                      navigate(`/${ownerParam}/${repoParam}`)
                       return
                     }
-                    if (envNames.includes(v)) {
-                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, v)}`)
+                    if (tagOptions.includes(v)) {
+                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, targetFromUrl)}`)
                     }
                   }}
-                  disabled={false}
+                  disabled={tagOptions.length === 0}
                 />
-              ) : (
-                <label className="flex min-w-0 max-w-[min(100%,18rem)] flex-1 items-center gap-2 sm:max-w-[20rem]">
-                  <span className="w-14 shrink-0 text-xs font-medium text-slate-500 sm:w-16">Target</span>
-                  <input
-                    type="text"
-                    readOnly
-                    disabled={!hasRef}
-                    value=""
-                    placeholder={targetPlaceholder}
-                    className="h-9 min-w-28 flex-1 cursor-not-allowed rounded-md border border-slate-800 bg-slate-900/50 px-2.5 text-sm text-slate-500 placeholder:text-slate-600"
+                {hasRef && scanReady && envNames.length > 0 ? (
+                  <ComboboxField
+                    label="Target"
+                    layout="inline"
+                    id="mesh-forge-target"
+                    options={envNames}
+                    value={envDraft}
+                    placeholder="--target--"
+                    clearSelectionLabel="Clear target"
+                    onChange={v => {
+                      setEnvDraft(v)
+                      if (!sourceRef) return
+                      if (v === "") {
+                        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null)}`, {
+                          replace: true,
+                        })
+                        return
+                      }
+                      if (envNames.includes(v)) {
+                        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, v)}`)
+                      }
+                    }}
+                    disabled={false}
                   />
-                </label>
-              )}
+                ) : (
+                  <label className="flex min-w-0 max-w-[min(100%,18rem)] flex-1 items-center gap-2 sm:max-w-[20rem]">
+                    <span className="w-14 shrink-0 text-xs font-medium text-slate-500 sm:w-16">Target</span>
+                    <input
+                      type="text"
+                      readOnly
+                      disabled={!hasRef}
+                      value=""
+                      placeholder={targetPlaceholder}
+                      className="h-9 min-w-28 flex-1 cursor-not-allowed rounded-md border border-slate-800 bg-slate-900/50 px-2.5 text-sm text-slate-500 placeholder:text-slate-600"
+                    />
+                  </label>
+                )}
 
-              <Button
-                type="button"
-                className="h-9 shrink-0 bg-amber-600 px-4 text-white hover:bg-amber-700"
-                disabled={flashPrimaryDisabled}
-                onClick={queueFlashArtifacts}
-              >
-                {flashButtonLabel}
-              </Button>
+                <Button
+                  type="button"
+                  className="h-9 shrink-0 bg-amber-600 px-4 text-white hover:bg-amber-700"
+                  disabled={flashPrimaryDisabled}
+                  onClick={queueFlashArtifacts}
+                >
+                  {flashButtonLabel}
+                </Button>
+              </div>
+
+              {statusStripEl}
             </div>
 
-            {statusStripEl}
-          </div>
-
-          <aside className="[grid-area:repo-aside] border-b border-slate-800 pb-8 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
-            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">About</h2>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">{owner}</p>
-              <h3 className="flex flex-wrap items-center gap-1.5 text-xl font-bold text-white leading-tight">
-                <a className="hover:text-cyan-400" href={ghRepoRoot} target="_blank" rel="noreferrer">
-                  {repo}
-                </a>
-                {!ghAboutHomepage ? (
+            <aside className="[grid-area:repo-aside] border-b border-slate-800 pb-8 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">About</h2>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">{owner}</p>
+                <h3 className="flex flex-wrap items-center gap-1.5 text-xl font-bold text-white leading-tight">
+                  <a className="hover:text-cyan-400" href={ghRepoRoot} target="_blank" rel="noreferrer">
+                    {repo}
+                  </a>
+                  {!ghAboutHomepage ? (
+                    <a
+                      className="inline-flex rounded p-0.5 text-slate-500 hover:text-white"
+                      href={ghTree}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
+                    >
+                      <Github className="size-4" aria-hidden />
+                      <span className="sr-only">
+                        {effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
+                      </span>
+                    </a>
+                  ) : null}
+                </h3>
+              </div>
+              {ghAboutDescription ? (
+                <p className="text-sm text-slate-200 leading-relaxed">{ghAboutDescription}</p>
+              ) : null}
+              {ghAboutHomepage ? (
+                <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                  <a
+                    className="inline-flex items-center gap-1.5 text-cyan-400 hover:underline"
+                    href={homepageHref(ghAboutHomepage)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Link2 className="size-3.5 shrink-0 text-slate-400" aria-hidden />
+                    {homepageLabel(ghAboutHomepage)}
+                  </a>
                   <a
                     className="inline-flex rounded p-0.5 text-slate-500 hover:text-white"
                     href={ghTree}
@@ -666,64 +684,37 @@ export default function RepoPage() {
                       {effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
                     </span>
                   </a>
-                ) : null}
-              </h3>
-            </div>
-            {ghAboutDescription ? <p className="text-sm text-slate-200 leading-relaxed">{ghAboutDescription}</p> : null}
-            {ghAboutHomepage ? (
-              <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                <a
-                  className="inline-flex items-center gap-1.5 text-cyan-400 hover:underline"
-                  href={homepageHref(ghAboutHomepage)}
-                  target="_blank"
-                  rel="noreferrer"
+                </div>
+              ) : null}
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-slate-600 text-slate-300 hover:border-slate-500 hover:bg-slate-800 hover:text-white"
+                  title="Refresh tags from GitHub"
+                  onClick={() => void refreshTags({ owner, repo }).catch(e => toast.error(String(e)))}
                 >
-                  <Link2 className="size-3.5 shrink-0 text-slate-400" aria-hidden />
-                  {homepageLabel(ghAboutHomepage)}
-                </a>
-                <a
-                  className="inline-flex rounded p-0.5 text-slate-500 hover:text-white"
-                  href={ghTree}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
-                >
-                  <Github className="size-4" aria-hidden />
-                  <span className="sr-only">
-                    {effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
-                  </span>
-                </a>
+                  <RefreshCw className="size-3.5" />
+                  Refresh tags
+                </Button>
               </div>
-            ) : null}
-            <div className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full border-slate-600 text-slate-300 hover:border-slate-500 hover:bg-slate-800 hover:text-white"
-                title="Refresh tags from GitHub"
-                onClick={() => void refreshTags({ owner, repo }).catch(e => toast.error(String(e)))}
-              >
-                <RefreshCw className="size-3.5" />
-                Refresh tags
-              </Button>
-            </div>
-          </aside>
+            </aside>
 
-          <div className="[grid-area:repo-readme] prose prose-invert prose-sm max-w-none prose-hr:my-6">
-            {readmeMd === null ? (
-              <p className="text-slate-500 not-prose">Loading…</p>
-            ) : (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                components={readmeMarkdownComponents}
-              >
-                {readmeMd || "*No README.*"}
-              </ReactMarkdown>
-            )}
+            <div className="[grid-area:repo-readme] prose prose-invert prose-sm max-w-none prose-hr:my-6">
+              {readmeMd === null ? (
+                <p className="text-slate-500 not-prose">Loading…</p>
+              ) : (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                  components={readmeMarkdownComponents}
+                >
+                  {readmeMd || "*No README.*"}
+                </ReactMarkdown>
+              )}
+            </div>
           </div>
-        </div>
         )}
       </section>
     </div>

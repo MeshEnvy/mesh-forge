@@ -1,34 +1,51 @@
-import { Button } from '@/components/ui/button'
-import { buildFlashParts, layoutPreviewFromManifest, manifestFromMap } from '../lib/espFlashLayout'
-import type { FlashManifest } from '../lib/untarGz'
+import { Button } from "@/components/ui/button"
+import { CheckCircle2 } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
+import { buildFlashParts, layoutPreviewFromManifest, manifestFromMap } from "../lib/espFlashLayout"
 import {
+  ensureSerialPortClosed,
   isSerialUserCancelledError,
   pulseUsbBootloaderPort,
   runEspFlash,
   type FlashPhase,
-} from '../lib/espFlashRun'
-import { extractTarGz } from '../lib/untarGz'
-import { CheckCircle2 } from 'lucide-react'
-import { useCallback, useState } from 'react'
-import { toast } from 'sonner'
+} from "../lib/espFlashRun"
+import { resolveFlashTargetFamily } from "../lib/flashTargetFamily"
+import type { FlashManifest, FlashTargetFamily } from "../lib/untarGz"
+import { extractTarGz } from "../lib/untarGz"
 
 type FlashProgress =
-  | { kind: 'indeterminate'; label: string }
-  | { kind: 'determinate'; label: string; pct: number }
-  | { kind: 'complete' }
+  | { kind: "indeterminate"; label: string }
+  | { kind: "determinate"; label: string; pct: number }
+  | { kind: "complete" }
 
 const PHASE_LABEL: Record<FlashPhase, string> = {
-  connect: 'Connecting to bootloader…',
-  detect: 'Detecting flash size…',
-  write: 'Writing firmware…',
+  connect: "Connecting to bootloader…",
+  detect: "Detecting flash size…",
+  write: "Writing firmware…",
+}
+
+function unsupportedFlashMessage(family: FlashTargetFamily): string | null {
+  if (family === "nrf52") {
+    return "This bundle targets nRF52. In-browser flashing here uses esptool (ESP32). Use adafruit-nrfutil / nrfutil with the ZIP from Download bundle, or your board’s UF2/DFU workflow."
+  }
+  if (family === "rp2040") {
+    return "This bundle targets RP2040. Use UF2 drag-and-drop or picotool with artifacts from Download bundle — Web Serial esptool here is for ESP32-class boards only."
+  }
+  if (family === "esp8266") {
+    return "This bundle targets ESP8266. The embedded flasher is tuned for ESP32; use esptool.py locally with Download bundle if you need USB flashing."
+  }
+  return null
 }
 
 type EspFlasherProps = {
   bundleUrl: string
+  /** PlatformIO env for the selected build; used if manifest omits targetFamily. */
+  targetEnv?: string | null
   /** Primary CTA label (default matches standalone copy). */
   flashButtonLabel?: string
   flashBusyLabel?: string
-  flashButtonSize?: 'default' | 'lg'
+  flashButtonSize?: "default" | "lg"
   className?: string
   /** Tighter copy when shown in the repo hero. */
   condensed?: boolean
@@ -36,10 +53,11 @@ type EspFlasherProps = {
 
 export default function EspFlasher({
   bundleUrl,
-  flashButtonLabel = 'Connect serial & flash',
-  flashBusyLabel = 'Flashing…',
-  flashButtonSize = 'default',
-  className = '',
+  targetEnv = null,
+  flashButtonLabel = "Connect serial & flash",
+  flashBusyLabel = "Flashing…",
+  flashButtonSize = "default",
+  className = "",
   condensed = false,
 }: EspFlasherProps) {
   const [busy, setBusy] = useState(false)
@@ -48,6 +66,42 @@ export default function EspFlasher({
   const [baud, setBaud] = useState(921600)
   const [layoutPreview, setLayoutPreview] = useState<FlashManifest | null>(null)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
+  const [bundleLoadError, setBundleLoadError] = useState<string | null>(null)
+  const [dfuTouchComplete, setDfuTouchComplete] = useState(false)
+
+  useEffect(() => {
+    setDfuTouchComplete(false)
+    setLayoutPreview(null)
+    setBundleLoadError(null)
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(bundleUrl)
+        if (!res.ok) {
+          if (!cancelled) setBundleLoadError(`Download failed: ${res.status}`)
+          return
+        }
+        const buf = new Uint8Array(await res.arrayBuffer())
+        const files = extractTarGz(buf)
+        const m = manifestFromMap(files)
+        if (!cancelled) {
+          setLayoutPreview(m)
+          setBundleLoadError(null)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setBundleLoadError(e instanceof Error ? e.message : String(e))
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [bundleUrl])
+
+  const resolvedFamily = resolveFlashTargetFamily(layoutPreview, targetEnv)
+  const flashBlockedReason = unsupportedFlashMessage(resolvedFamily)
+  const canEspFlash = flashBlockedReason === null
 
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
@@ -60,20 +114,25 @@ export default function EspFlasher({
   }, [bundleUrl])
 
   const flash = useCallback(async () => {
-    if (!('serial' in navigator)) {
-      toast.error('Web Serial is not supported in this browser')
+    if (!canEspFlash) {
+      toast.error("Unsupported for in-browser flash", { description: flashBlockedReason })
+      return
+    }
+    if (!("serial" in navigator)) {
+      toast.error("Web Serial is not supported in this browser")
       return
     }
     setBusy(true)
-    setFlashProgress({ kind: 'indeterminate', label: 'Select a serial port…' })
+    setFlashProgress({ kind: "indeterminate", label: "Select a serial port…" })
     let finishedOk = false
+    let port: SerialPort | undefined
     try {
-      const port = await navigator.serial.requestPort()
-      setFlashProgress({ kind: 'indeterminate', label: 'Downloading firmware…' })
+      port = await navigator.serial.requestPort()
+      setFlashProgress({ kind: "indeterminate", label: "Downloading firmware…" })
       const files = await prepareBundle()
       const parts = buildFlashParts(files)
       if (!parts) {
-        toast.error('Could not detect flash layout from bundle')
+        toast.error("Could not detect flash layout from bundle")
         return
       }
 
@@ -82,40 +141,45 @@ export default function EspFlasher({
         parts,
         baud,
         eraseAll,
-        resetMode: noReset ? 'no_reset' : 'default_reset',
+        resetMode: noReset ? "no_reset" : "default_reset",
         onPhase: phase => {
-          setFlashProgress({ kind: 'indeterminate', label: PHASE_LABEL[phase] })
+          setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
         },
         onWriteProgress: p => {
           setFlashProgress({
-            kind: 'determinate',
+            kind: "determinate",
             label: `Writing firmware (${p.imageIndex + 1}/${p.imageCount})`,
             pct: p.overallPct,
           })
         },
       })
       finishedOk = true
-      setFlashProgress({ kind: 'complete' })
-      toast.success('Flash complete')
+      setFlashProgress({ kind: "complete" })
+      toast.success("Flash complete")
     } catch (e) {
       if (isSerialUserCancelledError(e)) {
         return
       }
       const msg = e instanceof Error ? e.message : String(e)
-      toast.error('Flash failed', { description: msg })
+      toast.error("Flash failed", { description: msg })
     } finally {
+      if (port && !finishedOk) {
+        void ensureSerialPortClosed(port)
+      }
       setBusy(false)
       if (!finishedOk) {
         setFlashProgress(null)
       }
     }
-  }, [baud, eraseAll, noReset, prepareBundle])
+  }, [baud, eraseAll, noReset, prepareBundle, canEspFlash, flashBlockedReason])
 
-  const boot1200 = useCallback(async () => {
+  const enterDfuMode = useCallback(async () => {
     try {
       await pulseUsbBootloaderPort()
-      toast.success('1200 baud pulse sent', {
-        description: 'If the board did not enter bootloader, hold BOOT, tap RST, then try flash again.',
+      setDfuTouchComplete(true)
+      toast.success("DFU / bootloader touch sent", {
+        description:
+          "If the device re-enumerated, pick the bootloader port and flash. If not, hold BOOT, tap RST, then try again.",
       })
     } catch (e) {
       if (isSerialUserCancelledError(e)) {
@@ -125,22 +189,37 @@ export default function EspFlasher({
     }
   }, [])
 
+  const familyLine =
+    resolvedFamily !== "esp32" || layoutPreview?.targetFamily
+      ? `Target: ${resolvedFamily}${layoutPreview?.platform ? ` · ${layoutPreview.platform.trim()}` : ""}`
+      : null
+
   return (
-    <div
-      className={`rounded-lg border border-slate-700 bg-slate-900/50 p-4 space-y-3 ${className}`.trim()}
-    >
+    <div className={`rounded-lg border border-slate-700 bg-slate-900/50 p-4 space-y-3 ${className}`.trim()}>
       {condensed ? null : (
         <>
-          <h3 className="text-lg font-semibold text-white">ESP flash (Web Serial)</h3>
+          <h3 className="text-lg font-semibold text-white">USB firmware flash (Web Serial)</h3>
           <p className="text-sm text-slate-400">
-            Uses esptool-js. Connect USB, put the board in bootloader if needed, then flash. Wrong offsets can brick
-            hardware—verify the map.
+            esptool-js for ESP32-class layouts. Put the board in bootloader if needed — use{" "}
+            <strong>Enter DFU mode</strong> for the USB CDC 1200-baud touch when supported.
           </p>
         </>
       )}
       {condensed ? (
         <p className="text-sm text-slate-400">
-          USB + Chromium Web Serial. Verify the flash map before writing—wrong images can brick hardware.
+          Chromium Web Serial + esptool-js (ESP32-class). Verify the flash map — wrong images can brick hardware.
+        </p>
+      ) : null}
+
+      {bundleLoadError ? (
+        <p className="text-xs text-amber-300/90">Could not prefetch bundle: {bundleLoadError}</p>
+      ) : null}
+
+      {familyLine ? <p className="text-xs font-mono text-slate-400">{familyLine}</p> : null}
+
+      {flashBlockedReason ? (
+        <p className="text-sm text-amber-200/90 rounded-md border border-amber-800/40 bg-amber-950/30 px-3 py-2">
+          {flashBlockedReason}
         </p>
       ) : null}
 
@@ -152,9 +231,9 @@ export default function EspFlasher({
         </ul>
       ) : (
         <p className="text-xs text-slate-500">
-          Default layout: bootloader @ 0x1000, partitions @ 0x8000, app @ 0x10000, optional boot_app0 @ 0xe000—or
-          single firmware.bin @ 0x0. With <code className="text-slate-400">flash-manifest.json</code>, offsets come
-          from the bundle.
+          Default layout: bootloader @ 0x1000, partitions @ 0x8000, app @ 0x10000, optional boot_app0 @ 0xe000—or single
+          firmware.bin @ 0x0. With <code className="text-slate-400">flash-manifest.json</code>, offsets come from the
+          bundle.
         </p>
       )}
 
@@ -165,6 +244,7 @@ export default function EspFlasher({
             className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white"
             value={baud}
             onChange={e => setBaud(Number(e.target.value))}
+            disabled={!canEspFlash}
           >
             <option value={115200}>115200</option>
             <option value={460800}>460800</option>
@@ -172,12 +252,26 @@ export default function EspFlasher({
           </select>
         </label>
         <label className="text-sm text-slate-300 flex items-center gap-2">
-          <input type="checkbox" checked={eraseAll} onChange={e => setEraseAll(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={eraseAll}
+            onChange={e => setEraseAll(e.target.checked)}
+            disabled={!canEspFlash}
+          />
           Full chip erase (destructive)
         </label>
         <label className="text-sm text-slate-300 flex items-center gap-2">
-          <input type="checkbox" checked={noReset} onChange={e => setNoReset(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={noReset}
+            onChange={e => setNoReset(e.target.checked)}
+            disabled={!canEspFlash}
+          />
           No auto-reset (hold BOOT manually)
+        </label>
+        <label className="text-sm text-slate-300 flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={dfuTouchComplete} onChange={e => setDfuTouchComplete(e.target.checked)} />
+          Bootloader touch done
         </label>
       </div>
 
@@ -186,18 +280,18 @@ export default function EspFlasher({
           type="button"
           size={flashButtonSize}
           className="bg-amber-600 hover:bg-amber-700"
-          disabled={busy}
+          disabled={busy || !canEspFlash}
           onClick={() => void flash()}
         >
           {busy ? flashBusyLabel : flashButtonLabel}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => void boot1200()}>
-          1200 baud reset
+        <Button type="button" variant="outline" disabled={busy} onClick={() => void enterDfuMode()}>
+          {dfuTouchComplete ? "Enter DFU mode (again)" : "Enter DFU mode"}
         </Button>
       </div>
 
       {flashProgress ? (
-        flashProgress.kind === 'complete' ? (
+        flashProgress.kind === "complete" ? (
           <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-950/40 px-3 py-2">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden />
             <span className="text-sm font-medium text-emerald-300">Flashing complete</span>
@@ -206,7 +300,7 @@ export default function EspFlasher({
           <div className="space-y-2">
             <p className="text-xs text-slate-400">{flashProgress.label}</p>
             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-              {flashProgress.kind === 'determinate' ? (
+              {flashProgress.kind === "determinate" ? (
                 <div
                   className="h-full rounded-full bg-amber-600 transition-[width] duration-150 ease-out"
                   style={{ width: `${flashProgress.pct}%` }}

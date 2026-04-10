@@ -1,7 +1,7 @@
-import pako from 'pako'
+import pako from "pako"
 
 function basenameKey(path: string): string {
-  const parts = path.replace(/^\.\//, '').split('/')
+  const parts = path.replace(/^\.\//, "").split("/")
   return parts[parts.length - 1] ?? path
 }
 
@@ -16,18 +16,18 @@ export function extractTarGz(gz: Uint8Array): Map<string, Uint8Array> {
     const header = tar.subarray(off, off + 512)
     off += 512
 
-    const name = dec.decode(header.subarray(0, 100)).split('\0')[0].trim()
+    const name = dec.decode(header.subarray(0, 100)).split("\0")[0].trim()
     if (!name) break
 
     const typeflag = dec.decode(header.subarray(156, 157))
-    const sizeField = dec.decode(header.subarray(124, 136)).split('\0')[0].trim()
+    const sizeField = dec.decode(header.subarray(124, 136)).split("\0")[0].trim()
     const size = parseInt(sizeField, 8) || 0
-    const prefix = dec.decode(header.subarray(345, 500)).split('\0')[0].trim()
-    const path = (prefix ? `${prefix}/${name}` : name).replace(/^\.\//, '')
+    const prefix = dec.decode(header.subarray(345, 500)).split("\0")[0].trim()
+    const path = (prefix ? `${prefix}/${name}` : name).replace(/^\.\//, "")
 
     const pad = (512 - (size % 512)) % 512
 
-    if (typeflag === '0' || typeflag === '\0' || typeflag === '') {
+    if (typeflag === "0" || typeflag === "\0" || typeflag === "") {
       out.set(path, new Uint8Array(tar.subarray(off, off + size)))
     }
 
@@ -53,7 +53,17 @@ export type FlashManifestImage = {
   role?: string
 }
 
-export type FlashManifest = { images: FlashManifestImage[] }
+/** Coarse MCU family for USB flasher entry + tool selection (from CI / PlatformIO). */
+export type FlashTargetFamily = "esp32" | "esp8266" | "nrf52" | "rp2040" | "unknown"
+
+export type FlashManifest = {
+  images: FlashManifestImage[]
+  targetFamily?: FlashTargetFamily
+  /** Raw PlatformIO `platform` (debug / advanced UI). */
+  platform?: string
+  /** Raw PlatformIO `board` (debug / advanced UI). */
+  board?: string
+}
 
 export function parseFlashManifest(json: string): FlashManifest | null {
   try {

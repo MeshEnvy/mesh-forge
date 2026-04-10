@@ -2,9 +2,14 @@
 """
 Emit flash-manifest.json for Mesh Forge USB flasher.
 
-If BUILD_DIR/flash-manifest.json already exists (project-supplied), leave it.
+If BUILD_DIR/flash-manifest.json already exists (project-supplied), merge in
+targetFamily from PlatformIO when missing.
+
 Otherwise, if Meshtastic-style *.mt.json is present, synthesize a manifest
 from partition table + on-disk artifacts.
+
+Optional args: PROJECT_ROOT TARGET_ENV — merged PIO config for that env fills
+targetFamily (and platform/board) for the USB flasher UI.
 """
 from __future__ import annotations
 
@@ -13,6 +18,85 @@ import json
 import os
 import re
 import sys
+
+
+def _normalize_platform(platform: str | None) -> str:
+    if not platform:
+        return ""
+    p = platform.strip().lower()
+    if "#" in p:
+        p = p.split("#", 1)[0].strip()
+    if "@" in p:
+        p = p.split("@", 1)[0].strip()
+    if "/" in p:
+        p = p.rsplit("/", 1)[-1].strip()
+    return p
+
+
+def _platform_to_target_family(platform: str | None, board: str | None) -> str:
+    pl = _normalize_platform(platform)
+    b = (board or "").lower()
+    if "8266" in pl or "esp8266" in b:
+        return "esp8266"
+    if "nrf52" in pl or "nrf52840" in b or "nrf52833" in b or "nrf52832" in b:
+        return "nrf52"
+    if "rp2040" in pl or "rp2040" in b or "raspberrypi" in pl:
+        return "rp2040"
+    if "espressif32" in pl or "esp32" in pl or "esp32" in b or "esp32c3" in b or "esp32s3" in b:
+        return "esp32"
+    return "unknown"
+
+
+def _resolve_pio_target_family(project_root: str, target_env: str) -> tuple[str, str | None, str | None]:
+    try:
+        from platformio.project.config import ProjectConfig
+    except ImportError:
+        print("platformio not installed; targetFamily will be unknown", file=sys.stderr)
+        return "unknown", None, None
+
+    ini = os.path.join(project_root, "platformio.ini")
+    if not os.path.isfile(ini):
+        return "unknown", None, None
+
+    old = os.getcwd()
+    try:
+        os.chdir(project_root)
+        config = ProjectConfig("platformio.ini")
+        section = f"env:{target_env}"
+        if section not in config.sections():
+            print(f"PIO env not found: {target_env!r}", file=sys.stderr)
+            return "unknown", None, None
+        platform = config.get(section, "platform")
+        board = config.get(section, "board")
+        fam = _platform_to_target_family(platform, board)
+        return fam, platform, board
+    except Exception as e:
+        print(f"PIO targetFamily resolution failed: {e}", file=sys.stderr)
+        return "unknown", None, None
+    finally:
+        os.chdir(old)
+
+
+def _merge_target_family_meta(
+    manifest: dict,
+    target_family: str,
+    platform: str | None,
+    board: str | None,
+) -> dict:
+    """Add targetFamily / platform / board only when absent."""
+    out = dict(manifest)
+    if "targetFamily" not in out:
+        out["targetFamily"] = target_family
+    if platform and "platform" not in out:
+        out["platform"] = platform.strip() if isinstance(platform, str) else platform
+    if board and "board" not in out:
+        out["board"] = board.strip() if isinstance(board, str) else board
+    return out
+
+
+def _write_manifest(path: str, data: dict) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
 
 def parse_offset(v: object) -> int | None:
@@ -199,13 +283,38 @@ def pick_mt_json(build_dir: str) -> str | None:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: emit-flash-manifest.py BUILD_DIR", file=sys.stderr)
+        print(
+            "usage: emit-flash-manifest.py BUILD_DIR [PROJECT_ROOT TARGET_ENV]",
+            file=sys.stderr,
+        )
         return 2
     build_dir = os.path.abspath(sys.argv[1])
+    project_root: str | None = None
+    target_env: str | None = None
+    if len(sys.argv) >= 4:
+        project_root = os.path.abspath(sys.argv[2])
+        target_env = sys.argv[3]
+
+    pio_family, pio_platform, pio_board = (
+        _resolve_pio_target_family(project_root, target_env)
+        if project_root and target_env
+        else ("unknown", None, None)
+    )
+
     out_path = os.path.join(build_dir, "flash-manifest.json")
 
     if os.path.isfile(out_path):
-        print(f"Keeping existing {out_path}")
+        with open(out_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("images"), list):
+            print(f"Invalid existing {out_path}", file=sys.stderr)
+            return 1
+        merged = _merge_target_family_meta(manifest, pio_family, pio_platform, pio_board)
+        if merged != manifest:
+            _write_manifest(out_path, merged)
+            print(f"Merged targetFamily into {out_path}")
+        else:
+            print(f"Keeping existing {out_path} (targetFamily already set)")
         return 0
 
     mt_path = pick_mt_json(build_dir)
@@ -221,8 +330,8 @@ def main() -> int:
         print("Could not synthesize flash-manifest.json from mt.json")
         return 0
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+    manifest = _merge_target_family_meta(manifest, pio_family, pio_platform, pio_board)
+    _write_manifest(out_path, manifest)
     print(f"Wrote {out_path}")
     return 0
 
