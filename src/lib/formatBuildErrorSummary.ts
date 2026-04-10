@@ -32,7 +32,7 @@ export function buildFailurePresentation(summary: string | undefined): {
   if (/GitHub API failed:\s*5\d\d/.test(summary) || /GitHub API failed:\s*429/.test(summary)) {
     return {
       headline: 'GitHub was temporarily unavailable',
-      body: 'Starting the build failed because GitHub returned an error or rate limit. Use Retry build — it often works on a second try.',
+      body: 'Starting the build failed because GitHub returned an error or rate limit. Flash again — it often works on a second try.',
     }
   }
   if (/GitHub API failed:\s*4\d\d/.test(summary) && !summary.includes('422')) {
@@ -50,7 +50,7 @@ export function buildFailurePresentation(summary: string | undefined): {
   return {
     headline: 'Build failed in CI',
     body:
-      'Often a compile error, missing PlatformIO dependency, or bad env config in the repo. Fix the project if you can, then use Retry build. ' +
-      'Transient CI issues also happen — retry is safe.',
+      'Often a compile error, missing PlatformIO dependency, or bad env config in the repo. Fix the project if you can, then use Flash again. ' +
+      'Transient CI issues also happen — trying again is safe.',
   }
 }

@@ -3,7 +3,7 @@ import { api } from "@/convex/_generated/api"
 import { sortTagNames } from "@/convex/lib/tagSemver"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { Github, Link2, RefreshCw } from "lucide-react"
-import { useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import rehypeRaw from "rehype-raw"
@@ -158,6 +158,39 @@ export default function RepoPage() {
   const buildKey = resolvedSha && resolvedTargetEnv ? normalizeBuildKey(resolvedSha, resolvedTargetEnv) : null
   const build = useQuery(api.repoBuilds.getByBuildKey, buildKey ? { buildKey } : "skip")
 
+  /** Only show CI failure UI if this tab saw the build move into `failed` (not for stale failures on load). */
+  const [witnessedCiFailure, setWitnessedCiFailure] = useState(false)
+  const trackedBuildKeyRef = useRef<string | null>(null)
+  const prevBuildStatusRef = useRef<string | "absent" | undefined>(undefined)
+
+  useEffect(() => {
+    if (!buildKey) {
+      trackedBuildKeyRef.current = null
+      setWitnessedCiFailure(false)
+      prevBuildStatusRef.current = undefined
+      return
+    }
+
+    if (trackedBuildKeyRef.current !== buildKey) {
+      trackedBuildKeyRef.current = buildKey
+      setWitnessedCiFailure(false)
+      prevBuildStatusRef.current = undefined
+    }
+
+    if (build === undefined) {
+      return
+    }
+
+    const status = build === null ? "absent" : build.status
+    const prev = prevBuildStatusRef.current
+
+    if (status === "failed" && prev !== undefined && prev !== "failed") {
+      setWitnessedCiFailure(true)
+    }
+
+    prevBuildStatusRef.current = status
+  }, [buildKey, build])
+
   const [flashUrl, setFlashUrl] = useState<string | null>(null)
   const [flashPrep, setFlashPrep] = useState<"idle" | "loading" | "ready" | "error">("idle")
 
@@ -190,7 +223,7 @@ export default function RepoPage() {
     if (!effectiveRef || !resolvedSha || !resolvedTargetEnv) return
     if (build?.status === "failed" && build._id) {
       void retryBuild({ buildId: build._id })
-        .then(() => toast.message("Re-queued build"))
+        .then(() => toast.message("Starting a new build…"))
         .catch(e => toast.error(String(e)))
       return
     }
@@ -263,7 +296,11 @@ export default function RepoPage() {
     !scanReady ||
     buildInProgress
 
-  const flashButtonLabel = build?.status === "failed" ? "Retry build" : buildInProgress ? "Building…" : "Flash"
+  const flashButtonLabel = buildInProgress ? "Building…" : "Flash"
+
+  const showCiCard =
+    build &&
+    (build.status !== "failed" || witnessedCiFailure)
 
   const targetPlaceholder = !hasRef
     ? "--target--"
@@ -368,7 +405,7 @@ export default function RepoPage() {
             </div>
 
             <div className="max-w-2xl space-y-4">
-              {build ? (
+              {showCiCard ? (
                 <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-2 text-sm">
                   <div className="flex flex-wrap gap-2 items-center">
                     <span className="text-slate-500">CI</span>
@@ -408,7 +445,7 @@ export default function RepoPage() {
                               </summary>
                               <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
                                 {build.errorSummary.length > 2500
-                                  ? `${build.errorSummary.slice(0, 2500)}…`
+                                  ? `…${build.errorSummary.slice(-2500)}`
                                   : build.errorSummary}
                               </pre>
                             </details>
