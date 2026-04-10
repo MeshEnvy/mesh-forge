@@ -89,6 +89,36 @@ def spiffs_offset(parts: list[dict]) -> int | None:
     return part_offset_for_slot(parts, "spiffs")
 
 
+def _offset_int(im: dict) -> int:
+    o = im["offset"]
+    return int(o) if isinstance(o, int) else parse_offset(o) or 0
+
+
+def _dedupe_same_offset(images: list[dict]) -> list[dict]:
+    """
+    One esptool image per physical offset. Meshtastic maps both firmware-*.bin (app0)
+    and firmware-*.factory.bin to the same ota_0 slot — keep factory, drop the duplicate.
+    """
+    buckets: dict[int, list[dict]] = {}
+    for im in images:
+        buckets.setdefault(_offset_int(im), []).append(im)
+
+    def rank(im: dict) -> tuple:
+        f = im["file"]
+        opt = im.get("optional") is True
+        if re.search(r"\.factory\.bin$", f, re.I):
+            return (0, 0 if not opt else 1, f)
+        if not opt:
+            return (1, 0, f)
+        return (2, 0, f)
+
+    out: list[dict] = []
+    for off in sorted(buckets):
+        group = buckets[off]
+        out.append(group[0] if len(group) == 1 else min(group, key=rank))
+    return out
+
+
 def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
     parts: list[dict] = mt.get("part") or []
     if not parts:
@@ -148,14 +178,12 @@ def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
     if not images:
         return None
 
+    images = _dedupe_same_offset(images)
+
     if not any(re.match(r"^firmware-.+\.bin$", im["file"], re.I) for im in images):
         return None
 
-    def sort_key(im: dict) -> int:
-        o = im["offset"]
-        return int(o) if isinstance(o, int) else parse_offset(o) or 0
-
-    images.sort(key=sort_key)
+    images.sort(key=_offset_int)
     return {"images": images}
 
 
