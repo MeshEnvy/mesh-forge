@@ -1,0 +1,10 @@
+---
+description: Do not run Vite/production builds by default; they freeze this environment.
+alwaysApply: true
+---
+
+# Production build (Vite)
+
+Do **not** run `vite build`, `bun run build`, `npm run build`, or equivalent full production bundles **unless the user explicitly asks** for a build. They tend to freeze or stall here.
+
+Prefer lighter checks when validating changes (e.g. `tsc --noEmit`, `eslint`, targeted tests) or rely on static review. If a build is truly needed, say so and let the user run it locally or in CI.
