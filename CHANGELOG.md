@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Patch
+
+- **Repo About sidebar:** uses GitHub REST **`description`** and **`homepage`** (cached with branch list refresh), not a README-derived blurb—matches GitHub’s About section (text + link icon). Removed unused **`readmePlainSummary`** helper.
+- **Repo page layout:** GitHub-style **About** sidebar (**Refresh branches** under blurb; **GitHub** icon opens the ref tree next to homepage or repo title); main column **toolbar** (branch, target, **Flash** only), CI/USB, then **README** body (no separate “README” heading; spacing only above README so a leading `---` is not doubled with a border). Removed **device compatibility** voting (works / does not work) from the repo page.
+- **Repo README:** render inline HTML via `rehype-raw` + `rehype-sanitize` (badges, images) in the main column.
+- **Repo builds:** show a short explanation when GitHub returns **422 unexpected `workflow_dispatch` inputs** (common when Mesh Forge’s workflow YAML on GitHub is behind this repo); still truncate other long errors.
+- **RepoPage:** treat missing scan row (`null`) like loading so the UI does not crash before `ensureScan` creates the document.
+- Removed in-app **documentation** routes (`/docs`, ESP/nRF markdown pages). **`/docs/*`** and legacy **`/flasher`** URLs redirect to **home**. ESP **Web Serial** flashing only on **`/:owner/:repo` / tree** pages: when a build **succeeds**, the signed bundle is fetched automatically and **`EspFlasher`** appears (no separate upload page). Flasher options: baud, full erase, **no auto-reset**, **1200 baud** bootloader pulse. Unknown paths show **not found** instead of a blank screen.
+- Fixed **RepoPage** Rules of Hooks violation (blank page after default-branch redirect) by running all hooks before any `Navigate` return.
+- Standardized on **Bun** for installs and scripts; use **`bunx convex`** / **`bunx wrangler`** instead of npm/npx; removed `package-lock.json` in favor of `bun.lock`; Repo PlatformIO workflows upload R2 via `bunx wrangler`.
+- Home page: **Try a demo** shortcuts for `meshtastic/firmware` and `meshcore-dev/MeshCore` with GitHub links.
+- `bun run smoke` runs `bun run build` and `bunx convex codegen` for a quick CLI smoke without the browser.
+
+### Major
+
+- Replaced the Vike app with Vite, React, and React Router (GitHub-style `/:owner/:repo` and `/:owner/:repo/tree/*` routes, branch switcher, GitHub URL paste on the home page).
+- Replaced the Meshtastic-centric Convex model with `repoBranchList`, `repoRefScan`, `repoBuilds`, and `deviceReports`; removed legacy `builds` / `profiles` / `plugins` tables and related UI.
+- Target discovery runs in Convex via GitHub archive zip + INI scan (not per-branch GitHub Actions); CI builds remain GitHub Actions + PlatformIO + R2 with ingest callbacks.
+- Added an in-browser ESP flasher using esptool-js and Web Serial, consuming the same `.tar.gz` bundle as downloads.
+- Removed the plugin marketplace surface and froze `public/registry.json` to an empty object for this pivot.
+
 ## [0.4.0] - 2025-12-10
 
 ### Minor

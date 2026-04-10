@@ -11,14 +11,15 @@
 import type * as actions from "../actions.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
-import type * as builds from "../builds.js";
+import type * as deviceReports from "../deviceReports.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
-import type * as lib_filename from "../lib/filename.js";
-import type * as lib_flags from "../lib/flags.js";
+import type * as lib_platformioScan from "../lib/platformioScan.js";
 import type * as lib_r2 from "../lib/r2.js";
-import type * as plugins from "../plugins.js";
-import type * as profiles from "../profiles.js";
+import type * as repoBranches from "../repoBranches.js";
+import type * as repoBuildDownloads from "../repoBuildDownloads.js";
+import type * as repoBuilds from "../repoBuilds.js";
+import type * as repoScans from "../repoScans.js";
 
 import type {
   ApiFromModules,
@@ -30,14 +31,15 @@ declare const fullApi: ApiFromModules<{
   actions: typeof actions;
   admin: typeof admin;
   auth: typeof auth;
-  builds: typeof builds;
+  deviceReports: typeof deviceReports;
   helpers: typeof helpers;
   http: typeof http;
-  "lib/filename": typeof lib_filename;
-  "lib/flags": typeof lib_flags;
+  "lib/platformioScan": typeof lib_platformioScan;
   "lib/r2": typeof lib_r2;
-  plugins: typeof plugins;
-  profiles: typeof profiles;
+  repoBranches: typeof repoBranches;
+  repoBuildDownloads: typeof repoBuildDownloads;
+  repoBuilds: typeof repoBuilds;
+  repoScans: typeof repoScans;
 }>;
 
 /**

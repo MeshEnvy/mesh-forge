@@ -1,34 +1,31 @@
-name: Custom Firmware Build
+name: Repo PlatformIO Build
 
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: "Target board (e.g. rak4631)"
+      owner:
         required: true
         type: string
-      flags:
-        description: "Build flags (e.g. -DMESHTASTIC_EXCLUDE_MQTT)"
-        required: false
-        type: string
-      version:
-        description: "Firmware Version (Tag/Branch)"
-        required: true
-      build_id:
-        description: "Convex Build ID"
+      repo:
         required: true
         type: string
-      build_hash:
-        description: "Build hash for artifact naming"
+      ref:
+        required: true
+        type: string
+      target_env:
+        required: true
+        type: string
+      repo_build_id:
+        required: true
+        type: string
+      build_key:
+        required: true
+        type: string
+      resolved_source_sha:
         required: true
         type: string
       convex_url:
-        description: "Convex Site URL"
         required: true
-        type: string
-      plugins:
-        description: "Space-separated plugin slugs to install"
-        required: false
         type: string
 
 jobs:
@@ -36,238 +33,95 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CONVEX_URL: ${{ inputs.convex_url }}
-      BUILD_ID: ${{ inputs.build_id }}
+      REPO_BUILD_ID: ${{ inputs.repo_build_id }}
       CONVEX_BUILD_TOKEN: ${{ secrets.CONVEX_BUILD_TOKEN }}
     steps:
-      - name: Setup status update helper
+      - name: Notify Convex — running
         shell: bash
         run: |
-          cat > /tmp/update_status.sh << 'EOF'
-          update_status() {
-            local state=$1
-            local firmware_path=$2
-            local source_path=$3
-            local payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
-            if [ -n "$firmware_path" ]; then
-              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"firmwarePath\": \"$firmware_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
-            elif [ -n "$source_path" ]; then
-              payload="{\"build_id\": \"$BUILD_ID\", \"state\": \"$state\", \"sourcePath\": \"$source_path\", \"github_run_id\": \"$GITHUB_RUN_ID\"}"
-            fi
-            echo "✅ Updated status: $state"
-            curl -sSf -X POST "$CONVEX_URL/github-webhook" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $CONVEX_BUILD_TOKEN" \
-              -d "$payload" || true
-          }
-          EOF
-          chmod +x /tmp/update_status.sh
-
-      - name: Update Status - Setting Up Python
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status setting_up_python
+          curl -sSf -X POST "$CONVEX_URL/ingest-repo-build" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $CONVEX_BUILD_TOKEN" \
+            -d "{\"repo_build_id\":\"$REPO_BUILD_ID\",\"state\":\"running\",\"github_run_id\":${{ github.run_id }}}"
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Update Status - Fetching Firmware
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status checking_out_firmware
-
-      - name: Checkout Firmware
-        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          repository: meshtastic/firmware
-          ref: ${{ inputs.version }}
-          path: firmware
-          submodules: recursive
-          fetch-depth: 1
+          bun-version: latest
 
-      - name: Preparing Source
+      - name: Download source archive
+        shell: bash
+        env:
+          OWNER: ${{ inputs.owner }}
+          REPO: ${{ inputs.repo }}
+          REF: ${{ inputs.ref }}
+        run: |
+          ENC_REF=$(python3 -c "import urllib.parse,os; print(urllib.parse.quote(os.environ['REF'], safe=''))")
+          curl -fsSL -o /tmp/src.zip "https://codeload.github.com/${OWNER}/${REPO}/zip/${ENC_REF}"
+
+      - name: Extract and build
+        id: pio
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         shell: bash
         run: |
-          source /tmp/update_status.sh
-
-          update_status installing_wrangler
-          npm install -g wrangler
-
-          update_status installing_pip
-          python -m pip install --upgrade pip
-
-          update_status installing_mpm
-          pip install mesh-plugin-manager
-
-          cd firmware
-          update_status patching_firmware
-          mpm init
-
-          update_status installing_meshtastic_plugins
-          mpm install ${{ inputs.plugins }}
-
-          # Create MESHFORGE.md with build metadata
-          cat > MESHFORGE.md << EOF
-          # Meshtastic Firmware Build Metadata
-
-          This archive contains the complete source code and dependencies used to build this firmware.
-
-          ## Build Configuration
-
-          - **Target Board**: ${{ inputs.target }}
-          - **Firmware Version**: ${{ inputs.version }}
-          - **Build Hash**: ${{ inputs.build_hash }}
-          - **Build Timestamp**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-          ## Build Flags / Compiler Switches
-
-          \`\`\`
-          ${{ inputs.flags || '(none)' }}
-          \`\`\`
-
-          ## How to Build
-
-          1. Extract this archive:
-             \`\`\`bash
-             tar -xzf source.tar.gz
-             \`\`\`
-
-          2. Navigate to the firmware directory:
-             \`\`\`bash
-             cd firmware
-             \`\`\`
-
-          3. Install PlatformIO (if not already installed):
-             \`\`\`bash
-             pip install platformio
-             \`\`\`
-
-          4. Build with the exact same configuration:
-             \`\`\`bash
-             export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
-             pio run -e ${{ inputs.target }}
-             \`\`\`
-
-          ## Notes
-
-          - PlatformIO dependencies (\`.pio/\`) are not included - PlatformIO will download these as needed
-          - The build flags above must be set exactly as shown to reproduce the build
-          EOF
-
-          # Create MESHFORGE.md so it gets included in the archive
-          # (already created above, just ensuring it exists)
-
-          # Define archive suffix for consistent naming
-          ARTIFACT_ARCHIVE_SUFFIX="-${{ inputs.build_hash }}-${{ github.run_id }}.tar.gz"
-
-          # Create archive from working directory to include plugins installed by mpm
-          # Exclude .git, .pio, and build artifacts
-          cd ..
-          tar --exclude='.git' \
-              --exclude='.pio' \
-              --exclude='*.bin' \
-              --exclude='*.uf2' \
-              --exclude='build' \
-              -czf "source${ARTIFACT_ARCHIVE_SUFFIX}" \
-              -C firmware .
-
-          update_status uploading_source_archive
-
-          SOURCE_ARCHIVE_PATH="/source${ARTIFACT_ARCHIVE_SUFFIX}"
-          SOURCE_OBJECT_PATH="${R2_BUCKET_NAME}/source${ARTIFACT_ARCHIVE_SUFFIX}"
-
-          # Upload source archive to R2
-          wrangler r2 object put "$SOURCE_OBJECT_PATH" \
-            --file "source${ARTIFACT_ARCHIVE_SUFFIX}" --remote
-
-          update_status uploaded_source "" "$SOURCE_ARCHIVE_PATH"
-
-      - name: Update Status - Loading caches
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-          update_status loading_caches
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.platformio
-            firmware/.pio/libdeps
-          key: ${{ runner.os }}-pio-${{ inputs.version }}
-          restore-keys: |
-            ${{ runner.os }}-pio-
-
-      - name: Building Firmware
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-        shell: bash
-        run: |
-          source /tmp/update_status.sh
-
-          update_status installing_platformio
-          pip install platformio
-
-          cd firmware
-          update_status building_firmware
-          echo "Building for target: ${{ inputs.target }}"
-          echo "Flags: ${{ inputs.flags }}"
-          echo "Plugins: ${{ inputs.plugins }}"
-
-          # Inject flags into platformio.ini or environment
-          export PLATFORMIO_BUILD_FLAGS="${{ inputs.flags }}"
-          echo "PLATFORMIO_BUILD_FLAGS set to: $PLATFORMIO_BUILD_FLAGS"
-
-          pio run -e ${{ inputs.target }}
-
-          update_status uploading_firmware
-          # Create tar.gz archive of all build artifacts from the target's build directory
-          # Change to the build directory and create archive from there
-          cd ".pio/build/${{ inputs.target }}"
-          # Find all build artifacts with specified extensions
-          ARTIFACTS=$(find . -maxdepth 1 -type f \( -name "*.bin" -o -name "*.hex" -o -name "*.elf" -o -name "*.uf2" -o -name "*.dat" -o -name "*.zip" \))
-          if [ -n "$ARTIFACTS" ]; then
-            # Create archive with all found artifacts
-            tar -czf "../../../firmware${ARTIFACT_ARCHIVE_SUFFIX}" $(find . -maxdepth 1 -type f \( -name "*.bin" -o -name "*.hex" -o -name "*.elf" -o -name "*.uf2" -o -name "*.dat" -o -name "*.zip" \))
-            cd ../../..
-          else
-            echo "Error: No build artifacts found matching [.bin, .hex, .elf, .uf2, .dat, .zip] in .pio/build/${{ inputs.target }}/"
-            echo "Recursive listing of .pio/build/${{ inputs.target }}/:"
-            find . -type f -ls || true
-            cd ../../..
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq unzip
+          unzip -q /tmp/src.zip -d /tmp/src
+          ROOT=$(find /tmp/src -mindepth 1 -maxdepth 1 -type d | head -1)
+          cd "$ROOT"
+          python -m pip install -q --upgrade pip
+          pip install -q platformio
+          pio run -e "${{ inputs.target_env }}" 2>&1 | tee /tmp/pio.log
+          BUILD_DIR=".pio/build/${{ inputs.target_env }}"
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "Build output directory missing"
             exit 1
           fi
+          ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
+          tar -czf "/tmp/$ARTIFACT_NAME" -C "$BUILD_DIR" .
+          OBJECT_PATH="${R2_BUCKET_NAME}/${ARTIFACT_NAME}"
+          bunx wrangler r2 object put "$OBJECT_PATH" --file "/tmp/$ARTIFACT_NAME" --remote
+          echo "r2_key=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
 
-          # Determine artifact path (with leading slash for storage)
-          ARTIFACT_PATH="/firmware${ARTIFACT_ARCHIVE_SUFFIX}"
-          # Object path for wrangler is bucket/key without leading slash
-          OBJECT_PATH="${R2_BUCKET_NAME}/firmware${ARTIFACT_ARCHIVE_SUFFIX}"
-
-          # Upload to R2 with hash and tar.gz extension
-          wrangler r2 object put "$OBJECT_PATH" \
-            --file "firmware${ARTIFACT_ARCHIVE_SUFFIX}" --remote
-
-          SOURCE_ARCHIVE_PATH="/source${ARTIFACT_ARCHIVE_SUFFIX}"
-          update_status uploaded "$ARTIFACT_PATH" "$SOURCE_ARCHIVE_PATH"
-
-      - name: Update Build Status - Final
-        if: always()
+      - name: Notify Convex — success
+        if: success()
         shell: bash
+        env:
+          R2_KEY: ${{ steps.pio.outputs.r2_key }}
         run: |
-          source /tmp/update_status.sh
-          STATUS="${{ job.status }}"
-          if [ "$STATUS" = "success" ]; then
-            STATUS_MSG="success"
-          else
-            STATUS_MSG="failure"
-          fi
-          update_status "$STATUS_MSG"
+          curl -sSf -X POST "$CONVEX_URL/ingest-repo-build" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $CONVEX_BUILD_TOKEN" \
+            -d "{\"repo_build_id\":\"$REPO_BUILD_ID\",\"state\":\"succeeded\",\"github_run_id\":${{ github.run_id }},\"r2ObjectKey\":\"$R2_KEY\"}"
+
+      - name: Notify Convex — failure
+        if: failure()
+        shell: bash
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 -c "
+          import json, os, urllib.request
+          err = open('/tmp/pio.log').read()[-4000:] if os.path.exists('/tmp/pio.log') else 'build failed'
+          body = {
+            'repo_build_id': os.environ['REPO_BUILD_ID'],
+            'state': 'failed',
+            'github_run_id': int(os.environ['GITHUB_RUN_ID']),
+            'errorSummary': err,
+          }
+          req = urllib.request.Request(
+            os.environ['CONVEX_URL'] + '/ingest-repo-build',
+            data=json.dumps(body).encode(),
+            headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + os.environ['CONVEX_BUILD_TOKEN']},
+            method='POST',
+          )
+          urllib.request.urlopen(req)
+          "

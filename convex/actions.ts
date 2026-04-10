@@ -2,14 +2,9 @@ import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import { action } from "./_generated/server"
 
-export const dispatchGithubBuild = action({
+export const dispatchRepoBuild = action({
   args: {
-    buildId: v.id("builds"),
-    target: v.string(),
-    flags: v.string(),
-    version: v.string(),
-    buildHash: v.string(),
-    plugins: v.optional(v.array(v.string())),
+    buildId: v.id("repoBuilds"),
   },
   handler: async (ctx, args) => {
     const githubToken = process.env.GITHUB_TOKEN
@@ -20,37 +15,32 @@ export const dispatchGithubBuild = action({
     const convexUrl = process.env.CONVEX_SITE_URL
     if (!convexUrl) {
       console.error("CONVEX_SITE_URL is not set")
-      // Proceeding anyway might fail if workflow requires it
     }
 
-    console.log("dispatchGithubBuild args:", JSON.stringify(args, null, 2))
-
-    if (!args.buildHash) {
-      throw new Error("args.buildHash is missing or empty")
+    const doc = await ctx.runQuery(internal.repoBuilds.getByIdInternal, { id: args.buildId })
+    if (!doc) {
+      throw new Error("repoBuild not found")
     }
 
-    // Use test workflow when running in Convex dev mode
     const isDev = process.env.CONVEX_ENV === "dev"
     const workflowFile = isDev ? "custom_build_test.yml" : "custom_build.yml"
 
     const payload = {
-      ref: "main", // or make this configurable
+      ref: "main",
       inputs: {
-        target: args.target,
-        flags: args.flags,
-        version: args.version,
-        build_id: args.buildId,
-        build_hash: args.buildHash,
-        convex_url: convexUrl || "https://example.com", // Fallback to avoid missing input error if that's the cause
-        plugins: (args.plugins ?? []).join(" "),
+        owner: doc.owner,
+        repo: doc.repo,
+        ref: doc.ref,
+        target_env: doc.targetEnv,
+        repo_build_id: doc._id,
+        build_key: doc.buildKey,
+        resolved_source_sha: doc.resolvedSourceSha,
+        convex_url: convexUrl || "https://example.com",
       },
     }
 
-    console.log(`Dispatching GitHub build to ${workflowFile} with payload:`, JSON.stringify(payload, null, 2))
-
     try {
       const url = `https://api.github.com/repos/MeshEnvy/mesh-forge/actions/workflows/${workflowFile}/dispatches`
-      console.log("GitHub API URL:", url)
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -65,16 +55,11 @@ export const dispatchGithubBuild = action({
         const errorText = await response.text()
         throw new Error(`GitHub API failed: ${response.status} ${errorText}`)
       }
-
-      // Note: GitHub dispatch API doesn't return the run ID immediately.
-      // We rely on the webhook to link the run back to our build record.
-      // Alternatively, we could poll for the most recent run, but that's race-condition prone.
     } catch (error) {
-      await ctx.runMutation(internal.builds.logBuildError, {
+      await ctx.runMutation(internal.repoBuilds.logBuildDispatchError, {
         buildId: args.buildId,
-        error: String(error),
+        message: String(error),
       })
-      // Re-throw so it shows up in Convex logs too
       throw error
     }
   },

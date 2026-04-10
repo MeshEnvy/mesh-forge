@@ -26,7 +26,7 @@ jobs:
       - name: Build
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex deploy --cmd 'bun run build'
+        run: bunx convex deploy --cmd 'bun run build'
 
       - name: Deploy
         uses: cloudflare/wrangler-action@v3

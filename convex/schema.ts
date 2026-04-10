@@ -2,45 +2,68 @@ import { authTables } from "@convex-dev/auth/server"
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 
-export const buildConfigFields = {
-  version: v.string(),
-  modulesExcluded: v.record(v.string(), v.boolean()),
-  target: v.string(),
-  pluginsEnabled: v.optional(v.array(v.string())),
-  pluginConfigs: v.optional(v.record(v.string(), v.record(v.string(), v.boolean()))),
+export const repoBranchListFields = {
+  owner: v.string(),
+  repo: v.string(),
+  defaultBranch: v.string(),
+  branches: v.array(
+    v.object({
+      name: v.string(),
+      sha: v.optional(v.string()),
+    })
+  ),
+  fetchedAt: v.number(),
+  etag: v.optional(v.string()),
+  /** GitHub REST `description` (About blurb), not README. */
+  description: v.optional(v.string()),
+  /** GitHub REST `homepage` (often meshtastic.org–style URL). */
+  homepage: v.optional(v.string()),
 }
 
-export const profileFields = {
-  userId: v.id("users"),
-  name: v.string(),
-  description: v.string(),
-  config: v.object(buildConfigFields),
-  isPublic: v.boolean(),
-  flashCount: v.number(),
+export const repoRefScanFields = {
+  owner: v.string(),
+  repo: v.string(),
+  resolvedSourceSha: v.string(),
+  scanStatus: v.union(v.literal("in_progress"), v.literal("complete"), v.literal("failed")),
+  envNames: v.optional(v.array(v.string())),
+  grouped: v.optional(v.any()),
+  scanError: v.optional(v.string()),
+  scannedAt: v.optional(v.number()),
+  scanRunnerRequestId: v.optional(v.string()),
+  scanProgressUrl: v.optional(v.string()),
+  githubRunId: v.optional(v.number()),
   updatedAt: v.number(),
 }
 
-export const buildFields = {
-  buildHash: v.string(),
-  status: v.string(),
+export const repoBuildsFields = {
+  owner: v.string(),
+  repo: v.string(),
+  ref: v.string(),
+  resolvedSourceSha: v.string(),
+  targetEnv: v.string(),
+  buildKey: v.string(),
+  status: v.union(
+    v.literal("queued"),
+    v.literal("running"),
+    v.literal("succeeded"),
+    v.literal("failed")
+  ),
   startedAt: v.number(),
   updatedAt: v.number(),
-  config: v.object(buildConfigFields),
-
-  // Optional props
   completedAt: v.optional(v.number()),
-  artifactPath: v.optional(v.string()), // Deprecated
-  firmwarePath: v.optional(v.string()),
-  sourceUrl: v.optional(v.string()), // Deprecated
-  sourcePath: v.optional(v.string()),
   githubRunId: v.optional(v.number()),
-  githubRunIdHistory: v.optional(v.array(v.number())),
+  r2ObjectKey: v.optional(v.string()),
+  errorSummary: v.optional(v.string()),
 }
 
-export const pluginFields = {
-  slug: v.string(),
-  flashCount: v.number(),
-  updatedAt: v.number(),
+export const deviceReportFields = {
+  owner: v.string(),
+  repo: v.string(),
+  resolvedSourceSha: v.string(),
+  targetEnv: v.string(),
+  works: v.boolean(),
+  userId: v.optional(v.id("users")),
+  createdAt: v.number(),
 }
 
 export const userSettingsFields = {
@@ -50,17 +73,20 @@ export const userSettingsFields = {
 
 export const schema = defineSchema({
   ...authTables,
-  profiles: defineTable(profileFields).index("by_userId", ["userId"]).index("by_isPublic", ["isPublic"]),
-  builds: defineTable(buildFields)
-    .index("by_buildHash", ["buildHash"])
+  repoBranchList: defineTable(repoBranchListFields).index("by_owner_repo", ["owner", "repo"]),
+  repoRefScan: defineTable(repoRefScanFields).index("by_repo_sha", ["owner", "repo", "resolvedSourceSha"]),
+  repoBuilds: defineTable(repoBuildsFields)
+    .index("by_buildKey", ["buildKey"])
+    .index("by_owner_repo", ["owner", "repo"])
     .index("by_status", ["status"])
-    .index("by_updatedAt", ["updatedAt"])
     .index("by_status_updatedAt", ["status", "updatedAt"]),
-  plugins: defineTable(pluginFields).index("by_slug", ["slug"]),
+  deviceReports: defineTable(deviceReportFields).index("by_repo_sha_target", [
+    "owner",
+    "repo",
+    "resolvedSourceSha",
+    "targetEnv",
+  ]),
   userSettings: defineTable(userSettingsFields).index("by_user", ["userId"]),
 })
-
-export const buildsDocValidator = schema.tables.builds.validator
-export const profilesDocValidator = schema.tables.profiles.validator
 
 export default schema

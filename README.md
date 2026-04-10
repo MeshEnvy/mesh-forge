@@ -21,9 +21,14 @@ Join our Discord community: [https://discord.gg/8KgJpvjfaJ](https://discord.gg/8
 git submodule update --init --recursive
 bun install
 
-# Run development server
-npx convex dev # Note: you will need to initialize or select a Convex project
+# Run development server (UI talks to `VITE_CONVEX_URL` in `.env.local`)
 bun run dev
+
+# When you change Convex code and want instant dev push (optional second terminal)
+bunx convex dev
+
+# One-command compile smoke (no browser): production build + Convex `tsc`
+bun run smoke
 
 # Build for production
 bun run build

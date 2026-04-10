@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { Authenticated, Unauthenticated, useQuery } from "convex/react"
+import { Link } from "react-router-dom"
 
 export default function Navbar() {
   const { signOut, signIn } = useAuthActions()
@@ -15,24 +16,18 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-8 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <img src={favicon} alt="Mesh Forge logo" className="h-10 w-10 rounded-lg" />
               <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
                 Mesh Forge
               </span>
-            </a>
+            </Link>
             <div className="flex items-center gap-4">
-              <a href="/docs" className="text-slate-300 hover:text-white transition-colors">
-                Docs
-              </a>
-              <a href="/plugins" className="text-slate-300 hover:text-white transition-colors">
-                Plugins
-              </a>
               <Authenticated>
                 {isAdmin && (
-                  <a href="/admin" className="text-slate-300 hover:text-white transition-colors">
+                  <Link to="/admin" className="text-slate-300 hover:text-white transition-colors">
                     Admin
-                  </a>
+                  </Link>
                 )}
               </Authenticated>
             </div>
