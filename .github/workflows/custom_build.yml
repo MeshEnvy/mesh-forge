@@ -86,7 +86,22 @@ jobs:
             exit 1
           fi
           ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
-          tar -czf "/tmp/$ARTIFACT_NAME" -C "$BUILD_DIR" .
+          STAGE=/tmp/fw-bundle
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          shopt -s nullglob
+          for f in "$BUILD_DIR"/*.bin "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex; do
+            cp -a "$f" "$STAGE/"
+          done
+          shopt -u nullglob
+          if [ -f "$BUILD_DIR/flash-manifest.json" ]; then
+            cp -a "$BUILD_DIR/flash-manifest.json" "$STAGE/"
+          fi
+          if [ -z "$(find "$STAGE" -mindepth 1 -maxdepth 1 -type f -print -quit)" ]; then
+            echo "No firmware artifacts found in $BUILD_DIR"
+            exit 1
+          fi
+          tar -czf "/tmp/$ARTIFACT_NAME" -C "$STAGE" .
           OBJECT_PATH="${R2_BUCKET_NAME}/${ARTIFACT_NAME}"
           bunx wrangler r2 object put "$OBJECT_PATH" --file "/tmp/$ARTIFACT_NAME" --remote
           echo "r2_key=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
