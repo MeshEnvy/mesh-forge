@@ -1,54 +1,64 @@
-import { ComboboxField } from '../components/ComboboxField'
-import EspFlasher from '../components/EspFlasher'
-import { Button } from '@/components/ui/button'
-import { api } from '@/convex/_generated/api'
-import { useAction, useMutation, useQuery } from 'convex/react'
-import { Github, Link2, RefreshCw } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { homepageHref, homepageLabel } from '../lib/githubHomepage'
-import ReactMarkdown from 'react-markdown'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
-import remarkGfm from 'remark-gfm'
-import { toast } from 'sonner'
-import { normalizeBuildKey } from '../lib/buildKey'
-import { buildFailurePresentation } from '../lib/formatBuildErrorSummary'
+import { Button } from "@/components/ui/button"
+import { api } from "@/convex/_generated/api"
+import { sortTagNames } from "@/convex/lib/tagSemver"
+import { useAction, useMutation, useQuery } from "convex/react"
+import { Github, Link2, RefreshCw } from "lucide-react"
+import { useEffect, useLayoutEffect, useMemo, useState } from "react"
+import ReactMarkdown from "react-markdown"
+import { Link, useNavigate, useParams } from "react-router-dom"
+import rehypeRaw from "rehype-raw"
+import rehypeSanitize from "rehype-sanitize"
+import remarkGfm from "remark-gfm"
+import { toast } from "sonner"
+import { ComboboxField } from "../components/ComboboxField"
+import EspFlasher from "../components/EspFlasher"
+import { normalizeBuildKey } from "../lib/buildKey"
+import { buildFailurePresentation } from "../lib/formatBuildErrorSummary"
+import { homepageHref, homepageLabel } from "../lib/githubHomepage"
+import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
 
-const MESH_FORGE_ACTIONS_REPO = 'MeshEnvy/mesh-forge'
+const MESH_FORGE_ACTIONS_REPO = "MeshEnvy/mesh-forge"
 const meshForgeWorkflowUrl = `https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/workflows/custom_build.yml`
-import { buildTreeSplatPath, parseTreeSplat } from '../lib/repoTreeUrl'
 
 export default function RepoPage() {
   const navigate = useNavigate()
-  const params = useParams<{ owner: string; repo: string; '*': string }>()
-  const ownerParam = params.owner ?? ''
-  const repoParam = params.repo ?? ''
-  const treePath = params['*']
+  const params = useParams<{ owner: string; repo: string; "*": string }>()
+  const ownerParam = params.owner ?? ""
+  const repoParam = params.repo ?? ""
+  const treePath = params["*"]
   const owner = useMemo(() => decodeURIComponent(ownerParam), [ownerParam])
   const repo = useMemo(() => decodeURIComponent(repoParam), [repoParam])
-  const { branchRef, targetEnv: targetFromUrl } = useMemo(() => parseTreeSplat(treePath), [treePath])
-  const hasBranch = Boolean(branchRef)
+  const { sourceRef, targetEnv: targetFromUrl } = useMemo(() => parseTreeSplat(treePath), [treePath])
+  const hasRef = Boolean(sourceRef)
 
-  const branchData = useQuery(
-    api.repoBranches.get,
-    owner && repo ? { owner, repo } : 'skip'
-  )
-  const refreshBranches = useAction(api.repoBranches.refresh)
+  const tagData = useQuery(api.repoTags.get, owner && repo ? { owner, repo } : "skip")
+  const refreshTags = useAction(api.repoTags.refresh)
   const resolveRef = useAction(api.repoScans.resolveRefToSha)
-  const fetchReadme = useAction(api.repoBranches.fetchReadme)
+  const fetchReadme = useAction(api.repoTags.fetchReadme)
   const ensureScan = useMutation(api.repoScans.ensureScan)
   const ensureBuild = useMutation(api.repoBuilds.ensureBuild)
   const retryBuild = useMutation(api.repoBuilds.retryBuild)
   const getSignedUrl = useAction(api.repoBuildDownloads.getSignedDownloadUrl)
-  /** Git branch/ref from URL only (null = `--branch--` / short `/owner/repo`). */
-  const effectiveRef = branchRef
+  /** Git ref from URL only (null = short `/owner/repo` → redirect to latest SemVer tag). */
+  const effectiveRef = sourceRef
 
   useEffect(() => {
-    if (!owner || !repo || branchData === undefined) return
-    if (branchData.row !== null && !branchData.isStale) return
-    void refreshBranches({ owner, repo }).catch(e => toast.error(String(e)))
-  }, [owner, repo, branchData, refreshBranches])
+    if (!owner || !repo || tagData === undefined) return
+    if (tagData.row !== null && !tagData.isStale) return
+    void refreshTags({ owner, repo }).catch(e => toast.error(String(e)))
+  }, [owner, repo, tagData, refreshTags])
+
+  useLayoutEffect(() => {
+    if (!owner || !repo) return
+    if (sourceRef) return
+    if (tagData === undefined || !tagData.row) return
+    const tags = tagData.row.tags
+    if (tags.length === 0) return
+    const sorted = sortTagNames(tags.map(t => t.name))
+    const latest = sorted[0]
+    if (!latest) return
+    navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+  }, [owner, repo, sourceRef, tagData, navigate, ownerParam, repoParam])
 
   const [resolvedSha, setResolvedSha] = useState<string | null>(null)
   const [refError, setRefError] = useState<string | null>(null)
@@ -78,7 +88,7 @@ export default function RepoPage() {
 
   const scan = useQuery(
     api.repoScans.getByRepoSha,
-    resolvedSha ? { owner, repo, resolvedSourceSha: resolvedSha } : 'skip'
+    resolvedSha ? { owner, repo, resolvedSourceSha: resolvedSha } : "skip"
   )
 
   const [readmeMd, setReadmeMd] = useState<string | null>(null)
@@ -91,67 +101,85 @@ export default function RepoPage() {
         if (!cancelled) setReadmeMd(r.markdown)
       })
       .catch(() => {
-        if (!cancelled) setReadmeMd('*(README could not be loaded.)*')
+        if (!cancelled) setReadmeMd("*(README could not be loaded.)*")
       })
     return () => {
       cancelled = true
     }
   }, [owner, repo, effectiveRef, fetchReadme])
 
-  const envNames = scan?.scanStatus === 'complete' ? scan.envNames ?? [] : []
+  const envNames = scan?.scanStatus === "complete" ? (scan.envNames ?? []) : []
   const resolvedTargetEnv =
-    hasBranch && targetFromUrl && envNames.length > 0 && envNames.includes(targetFromUrl)
-      ? targetFromUrl
-      : ''
+    hasRef && targetFromUrl && envNames.length > 0 && envNames.includes(targetFromUrl) ? targetFromUrl : ""
 
-  const [branchDraft, setBranchDraft] = useState('')
+  const [tagDraft, setTagDraft] = useState("")
   useEffect(() => {
-    setBranchDraft(branchRef ?? '')
-  }, [branchRef])
-
-  const [envDraft, setEnvDraft] = useState('')
-  useEffect(() => {
-    if (!hasBranch) {
-      setEnvDraft('')
+    if (!sourceRef) {
+      setTagDraft("")
       return
     }
-    setEnvDraft(targetFromUrl ?? '')
-  }, [hasBranch, targetFromUrl])
+    const tags = tagData?.row?.tags
+    if (!tags?.length) {
+      setTagDraft(sourceRef)
+      return
+    }
+    const names = tags.map(t => t.name)
+    const canonical =
+      names.find(n => n === sourceRef) ?? names.find(n => n.toLowerCase() === sourceRef.toLowerCase()) ?? sourceRef
+    setTagDraft(canonical)
+  }, [sourceRef, tagData?.row?.tags])
+
+  const tagOptions = useMemo(() => {
+    const tags = tagData?.row?.tags
+    if (!tags?.length) return []
+    const raw = tags.map(t => t.name)
+    const needExtra = sourceRef && !raw.some(n => n === sourceRef || n.toLowerCase() === sourceRef.toLowerCase())
+    const merged = needExtra ? [...raw, sourceRef] : [...raw]
+    return sortTagNames(merged)
+  }, [tagData?.row?.tags, sourceRef])
+
+  const [envDraft, setEnvDraft] = useState("")
+  useEffect(() => {
+    if (!hasRef) {
+      setEnvDraft("")
+      return
+    }
+    setEnvDraft(targetFromUrl ?? "")
+  }, [hasRef, targetFromUrl])
 
   useEffect(() => {
-    if (!branchRef || !targetFromUrl) return
-    if (scan?.scanStatus !== 'complete') return
+    if (!sourceRef || !targetFromUrl) return
+    if (scan?.scanStatus !== "complete") return
     if (envNames.length === 0 || !envNames.includes(targetFromUrl)) {
-      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(branchRef, null)}`, { replace: true })
+      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null)}`, { replace: true })
     }
-  }, [branchRef, targetFromUrl, envNames, scan?.scanStatus, navigate, ownerParam, repoParam])
+  }, [sourceRef, targetFromUrl, envNames, scan?.scanStatus, navigate, ownerParam, repoParam])
 
-  const buildKey =
-    resolvedSha && resolvedTargetEnv ? normalizeBuildKey(resolvedSha, resolvedTargetEnv) : null
-  const build = useQuery(api.repoBuilds.getByBuildKey, buildKey ? { buildKey } : 'skip')
+  const buildKey = resolvedSha && resolvedTargetEnv ? normalizeBuildKey(resolvedSha, resolvedTargetEnv) : null
+  const build = useQuery(api.repoBuilds.getByBuildKey, buildKey ? { buildKey } : "skip")
 
   const [flashUrl, setFlashUrl] = useState<string | null>(null)
-  const [flashPrep, setFlashPrep] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [flashPrep, setFlashPrep] = useState<"idle" | "loading" | "ready" | "error">("idle")
 
   useEffect(() => {
-    if (!build?._id || build.status !== 'succeeded') {
+    if (!build?._id || build.status !== "succeeded") {
       setFlashUrl(null)
-      setFlashPrep('idle')
+      setFlashPrep("idle")
       return
     }
     let cancelled = false
-    setFlashPrep('loading')
+    setFlashPrep("loading")
     setFlashUrl(null)
     void getSignedUrl({ buildId: build._id })
       .then(url => {
         if (cancelled) return
         setFlashUrl(url)
-        setFlashPrep('ready')
+        setFlashPrep("ready")
       })
       .catch(e => {
         if (cancelled) return
         toast.error(String(e))
-        setFlashPrep('error')
+        setFlashPrep("error")
       })
     return () => {
       cancelled = true
@@ -160,9 +188,9 @@ export default function RepoPage() {
 
   const queueFlashArtifacts = () => {
     if (!effectiveRef || !resolvedSha || !resolvedTargetEnv) return
-    if (build?.status === 'failed' && build._id) {
+    if (build?.status === "failed" && build._id) {
       void retryBuild({ buildId: build._id })
-        .then(() => toast.message('Re-queued build'))
+        .then(() => toast.message("Re-queued build"))
         .catch(e => toast.error(String(e)))
       return
     }
@@ -179,21 +207,19 @@ export default function RepoPage() {
     if (!build?._id) return
     try {
       const url = await getSignedUrl({ buildId: build._id })
-      window.open(url, '_blank', 'noopener,noreferrer')
+      window.open(url, "_blank", "noopener,noreferrer")
     } catch (e) {
       toast.error(String(e))
     }
   }
 
-  if (branchData === undefined) {
-    return (
-      <div className="min-h-[40vh] flex items-center justify-center text-slate-400">Loading repository…</div>
-    )
+  if (tagData === undefined) {
+    return <div className="min-h-[40vh] flex items-center justify-center text-slate-400">Loading repository…</div>
   }
-  if (!branchData.row) {
+  if (!tagData.row) {
     return (
       <div className="max-w-xl mx-auto px-6 py-16 text-slate-300">
-        <p className="mb-4">Could not load branch list. The repository may be private or missing.</p>
+        <p className="mb-4">Could not load tags. The repository may be private or missing.</p>
         <Button asChild variant="outline">
           <Link to="/">Home</Link>
         </Button>
@@ -201,23 +227,35 @@ export default function RepoPage() {
     )
   }
 
+  if (tagData.row.tags.length === 0) {
+    return (
+      <div className="max-w-xl mx-auto px-6 py-16 text-slate-300">
+        <p className="mb-4">
+          This repository has no tags. Mesh Forge needs at least one tag to pick a source revision.
+        </p>
+        <Button asChild variant="outline">
+          <Link to="/">Home</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  if (!sourceRef) {
+    return <div className="min-h-[40vh] flex items-center justify-center text-slate-400">Opening latest tag…</div>
+  }
+
   const ghRepoRoot = `https://github.com/${owner}/${repo}`
   const ghTree = effectiveRef
-    ? `https://github.com/${owner}/${repo}/tree/${effectiveRef.split('/').map(encodeURIComponent).join('/')}`
+    ? `https://github.com/${owner}/${repo}/tree/${effectiveRef.split("/").map(encodeURIComponent).join("/")}`
     : ghRepoRoot
 
-  const branchNames = branchData.row.branches.map(b => b.name)
-  let branchOptions =
-    branchRef && !branchNames.includes(branchRef) ? [branchRef, ...branchNames] : [...branchNames]
-  if (branchOptions.length === 0 && branchRef) branchOptions = [branchRef]
+  const ghAboutDescription = tagData.row.description?.trim() ?? ""
+  const ghAboutHomepage = tagData.row.homepage?.trim() ?? ""
 
-  const ghAboutDescription = branchData.row.description?.trim() ?? ''
-  const ghAboutHomepage = branchData.row.homepage?.trim() ?? ''
-
-  const scanReady = Boolean(hasBranch && resolvedSha && scan?.scanStatus === 'complete' && envNames.length > 0)
-  const buildInProgress = Boolean(build && (build.status === 'queued' || build.status === 'running'))
+  const scanReady = Boolean(hasRef && resolvedSha && scan?.scanStatus === "complete" && envNames.length > 0)
+  const buildInProgress = Boolean(build && (build.status === "queued" || build.status === "running"))
   const flashPrimaryDisabled =
-    !hasBranch ||
+    !hasRef ||
     !resolvedSha ||
     Boolean(refError) ||
     !resolvedTargetEnv ||
@@ -225,20 +263,19 @@ export default function RepoPage() {
     !scanReady ||
     buildInProgress
 
-  const flashButtonLabel =
-    build?.status === 'failed' ? 'Retry build' : buildInProgress ? 'Building…' : 'Flash'
+  const flashButtonLabel = build?.status === "failed" ? "Retry build" : buildInProgress ? "Building…" : "Flash"
 
-  const targetPlaceholder = !hasBranch
-    ? '--target--'
+  const targetPlaceholder = !hasRef
+    ? "--target--"
     : !resolvedSha
-      ? '…'
-      : scan == null || scan.scanStatus === 'in_progress'
-        ? 'Scanning…'
-        : scan.scanStatus === 'failed'
-          ? 'Scan failed'
+      ? "…"
+      : scan == null || scan.scanStatus === "in_progress"
+        ? "Scanning…"
+        : scan.scanStatus === "failed"
+          ? "Scan failed"
           : envNames.length === 0
-            ? 'No targets'
-            : '--target--'
+            ? "No targets"
+            : "--target--"
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 text-slate-200">
@@ -251,26 +288,26 @@ export default function RepoPage() {
           <div className="min-w-0 space-y-5 [grid-area:repo-main]">
             <div className="flex flex-nowrap items-end gap-2 overflow-x-auto border-b border-slate-800 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <ComboboxField
-                label="Branch"
+                label="Tag"
                 layout="inline"
-                id="mesh-forge-branch"
-                options={branchOptions}
-                value={branchDraft}
-                placeholder="--branch--"
-                clearSelectionLabel="Clear branch"
+                id="mesh-forge-tag"
+                options={tagOptions}
+                value={tagDraft}
+                placeholder="--tag--"
+                clearSelectionLabel="Clear tag"
                 onChange={v => {
-                  setBranchDraft(v)
-                  if (v === '') {
+                  setTagDraft(v)
+                  if (v === "") {
                     navigate(`/${ownerParam}/${repoParam}`)
                     return
                   }
-                  if (branchOptions.includes(v)) {
+                  if (tagOptions.includes(v)) {
                     navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, null)}`)
                   }
                 }}
-                disabled={branchOptions.length === 0}
+                disabled={tagOptions.length === 0}
               />
-              {hasBranch && scanReady && envNames.length > 0 ? (
+              {hasRef && scanReady && envNames.length > 0 ? (
                 <ComboboxField
                   label="Target"
                   layout="inline"
@@ -281,15 +318,15 @@ export default function RepoPage() {
                   clearSelectionLabel="Clear target"
                   onChange={v => {
                     setEnvDraft(v)
-                    if (!branchRef) return
-                    if (v === '') {
-                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(branchRef, null)}`, {
+                    if (!sourceRef) return
+                    if (v === "") {
+                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null)}`, {
                         replace: true,
                       })
                       return
                     }
                     if (envNames.includes(v)) {
-                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(branchRef, v)}`)
+                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, v)}`)
                     }
                   }}
                   disabled={false}
@@ -300,7 +337,7 @@ export default function RepoPage() {
                   <input
                     type="text"
                     readOnly
-                    disabled={!hasBranch}
+                    disabled={!hasRef}
                     value=""
                     placeholder={targetPlaceholder}
                     className="h-9 min-w-28 flex-1 cursor-not-allowed rounded-md border border-slate-800 bg-slate-900/50 px-2.5 text-sm text-slate-500 placeholder:text-slate-600"
@@ -319,14 +356,14 @@ export default function RepoPage() {
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-              {branchData?.isStale ? <span>Branch list may be stale.</span> : null}
+              {tagData?.isStale ? <span>Tag list may be stale.</span> : null}
               {refError ? <span className="text-red-400">{refError}</span> : null}
-              {!refError && hasBranch && !resolvedSha ? <span>Resolving branch…</span> : null}
-              {resolvedSha && (scan == null || scan.scanStatus === 'in_progress') ? (
+              {!refError && hasRef && !resolvedSha ? <span>Resolving tag…</span> : null}
+              {resolvedSha && (scan == null || scan.scanStatus === "in_progress") ? (
                 <span>Scanning PlatformIO…</span>
               ) : null}
-              {resolvedSha && scan?.scanStatus === 'failed' ? (
-                <span className="text-red-300">Scan failed: {scan.scanError ?? 'unknown'}</span>
+              {resolvedSha && scan?.scanStatus === "failed" ? (
+                <span className="text-red-300">Scan failed: {scan.scanError ?? "unknown"}</span>
               ) : null}
             </div>
 
@@ -345,7 +382,7 @@ export default function RepoPage() {
                       >
                         View run on GitHub
                       </a>
-                    ) : build.status === 'failed' ? (
+                    ) : build.status === "failed" ? (
                       <a
                         className="text-cyan-400 hover:underline text-xs"
                         href={meshForgeWorkflowUrl}
@@ -357,7 +394,7 @@ export default function RepoPage() {
                       </a>
                     ) : null}
                   </div>
-                  {build.status === 'failed' && build.errorSummary ? (
+                  {build.status === "failed" && build.errorSummary ? (
                     <div className="space-y-2 text-xs">
                       {(() => {
                         const { headline, body } = buildFailurePresentation(build.errorSummary)
@@ -380,7 +417,7 @@ export default function RepoPage() {
                       })()}
                     </div>
                   ) : null}
-                  {build.status === 'succeeded' ? (
+                  {build.status === "succeeded" ? (
                     <Button type="button" size="sm" variant="secondary" onClick={() => void download()}>
                       Download bundle
                     </Button>
@@ -388,8 +425,8 @@ export default function RepoPage() {
                 </div>
               ) : null}
 
-              {flashPrep === 'loading' ? <p className="text-sm text-slate-400">Preparing USB flasher…</p> : null}
-              {flashPrep === 'error' ? (
+              {flashPrep === "loading" ? <p className="text-sm text-slate-400">Preparing USB flasher…</p> : null}
+              {flashPrep === "error" ? (
                 <p className="text-sm text-amber-200/90">
                   Could not load a signed URL for flashing. Use <strong>Download bundle</strong> if you need the file.
                 </p>
@@ -421,19 +458,17 @@ export default function RepoPage() {
                     href={ghTree}
                     target="_blank"
                     rel="noreferrer"
-                    title={effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
+                    title={effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
                   >
                     <Github className="size-4" aria-hidden />
                     <span className="sr-only">
-                      {effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
+                      {effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
                     </span>
                   </a>
                 ) : null}
               </h3>
             </div>
-            {ghAboutDescription ? (
-              <p className="text-sm text-slate-200 leading-relaxed">{ghAboutDescription}</p>
-            ) : null}
+            {ghAboutDescription ? <p className="text-sm text-slate-200 leading-relaxed">{ghAboutDescription}</p> : null}
             {ghAboutHomepage ? (
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <a
@@ -450,11 +485,11 @@ export default function RepoPage() {
                   href={ghTree}
                   target="_blank"
                   rel="noreferrer"
-                  title={effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
+                  title={effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
                 >
                   <Github className="size-4" aria-hidden />
                   <span className="sr-only">
-                    {effectiveRef ? `View ${effectiveRef} on GitHub` : 'View repository on GitHub'}
+                    {effectiveRef ? `View ${effectiveRef} on GitHub` : "View repository on GitHub"}
                   </span>
                 </a>
               </div>
@@ -465,23 +500,21 @@ export default function RepoPage() {
                 variant="outline"
                 size="sm"
                 className="w-full border-slate-600 text-slate-300 hover:border-slate-500 hover:bg-slate-800 hover:text-white"
-                title="Refresh branches from GitHub"
-                onClick={() => void refreshBranches({ owner, repo }).catch(e => toast.error(String(e)))}
+                title="Refresh tags from GitHub"
+                onClick={() => void refreshTags({ owner, repo }).catch(e => toast.error(String(e)))}
               >
                 <RefreshCw className="size-3.5" />
-                Refresh branches
+                Refresh tags
               </Button>
             </div>
           </aside>
 
           <div className="[grid-area:repo-readme] prose prose-invert prose-sm max-w-none prose-hr:my-6">
-            {!effectiveRef ? (
-              <p className="text-slate-500 not-prose text-sm">Select a branch to load the README.</p>
-            ) : readmeMd === null ? (
+            {readmeMd === null ? (
               <p className="text-slate-500 not-prose">Loading…</p>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
-                {readmeMd || '*No README.*'}
+                {readmeMd || "*No README.*"}
               </ReactMarkdown>
             )}
           </div>

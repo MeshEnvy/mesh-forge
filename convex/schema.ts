@@ -2,14 +2,14 @@ import { authTables } from "@convex-dev/auth/server"
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 
-export const repoBranchListFields = {
+export const repoTagListFields = {
   owner: v.string(),
   repo: v.string(),
-  defaultBranch: v.string(),
-  branches: v.array(
+  /** Tag names + commit SHAs, SemVer-descending then non-SemVer reverse lexicographic (see convex/repoTags). */
+  tags: v.array(
     v.object({
       name: v.string(),
-      sha: v.optional(v.string()),
+      sha: v.string(),
     })
   ),
   fetchedAt: v.number(),
@@ -42,12 +42,7 @@ export const repoBuildsFields = {
   resolvedSourceSha: v.string(),
   targetEnv: v.string(),
   buildKey: v.string(),
-  status: v.union(
-    v.literal("queued"),
-    v.literal("running"),
-    v.literal("succeeded"),
-    v.literal("failed")
-  ),
+  status: v.union(v.literal("queued"), v.literal("running"), v.literal("succeeded"), v.literal("failed")),
   startedAt: v.number(),
   updatedAt: v.number(),
   completedAt: v.optional(v.number()),
@@ -73,7 +68,7 @@ export const userSettingsFields = {
 
 export const schema = defineSchema({
   ...authTables,
-  repoBranchList: defineTable(repoBranchListFields).index("by_owner_repo", ["owner", "repo"]),
+  repoTagList: defineTable(repoTagListFields).index("by_owner_repo", ["owner", "repo"]),
   repoRefScan: defineTable(repoRefScanFields).index("by_repo_sha", ["owner", "repo", "resolvedSourceSha"]),
   repoBuilds: defineTable(repoBuildsFields)
     .index("by_buildKey", ["buildKey"])

@@ -1,29 +1,32 @@
 /**
- * Mesh Forge tree URLs: `/owner/repo/tree/<branch segments>/target/<env>`
- * Branch ref may contain `/`; `target` is a reserved final segment pair.
+ * Mesh Forge tree URLs: `/owner/repo/tree/<tag-or-ref segments>/target/<env>`
+ * Source ref may contain `/` (nested tags are rare but allowed). `target` is a reserved final segment pair.
  */
 const TARGET_TAIL = /\/target\/([^/]+)$/
 
 export function parseTreeSplat(treePath: string | undefined): {
-  branchRef: string | null
+  sourceRef: string | null
   targetEnv: string | null
 } {
-  if (!treePath?.trim()) return { branchRef: null, targetEnv: null }
-  const segments = treePath.split('/').filter(Boolean)
-  if (segments.length === 0) return { branchRef: null, targetEnv: null }
-  const joined = segments.map(s => decodeURIComponent(s)).join('/')
+  if (!treePath?.trim()) return { sourceRef: null, targetEnv: null }
+  const segments = treePath.split("/").filter(Boolean)
+  if (segments.length === 0) return { sourceRef: null, targetEnv: null }
+  const joined = segments.map(s => decodeURIComponent(s)).join("/")
   const m = TARGET_TAIL.exec(joined)
-  if (!m) return { branchRef: joined, targetEnv: null }
-  const branchRef = joined.slice(0, m.index).replace(/\/$/, '') || null
+  if (!m) return { sourceRef: joined, targetEnv: null }
+  const sourceRef = joined.slice(0, m.index).replace(/\/$/, "") || null
   const targetEnv = m[1] ? decodeURIComponent(m[1]) : null
-  return { branchRef, targetEnv }
+  return { sourceRef, targetEnv }
 }
 
-/** Path after `/tree/` (no leading slash). Empty string means no branch — use short repo URL. */
-export function buildTreeSplatPath(branchRef: string | null, targetEnv: string | null): string {
-  const b = branchRef?.trim()
-  if (!b) return ''
-  const enc = b.split('/').map(s => encodeURIComponent(s)).join('/')
+/** Path after `/tree/` (no leading slash). Empty string means no ref — short `/owner/repo` redirects to latest tag. */
+export function buildTreeSplatPath(sourceRef: string | null, targetEnv: string | null): string {
+  const b = sourceRef?.trim()
+  if (!b) return ""
+  const enc = b
+    .split("/")
+    .map(s => encodeURIComponent(s))
+    .join("/")
   const t = targetEnv?.trim()
   if (!t) return enc
   return `${enc}/target/${encodeURIComponent(t)}`

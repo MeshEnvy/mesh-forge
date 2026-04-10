@@ -1,43 +1,43 @@
-import { Button } from '@/components/ui/button'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { parseGithubUrl } from '../lib/parseGithubUrl'
+import { Button } from "@/components/ui/button"
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { parseGithubUrl } from "../lib/parseGithubUrl"
 
-function encodeBranchPath(ref: string) {
-  return ref.split('/').map(encodeURIComponent).join('/')
+function encodeTreePath(ref: string) {
+  return ref.split("/").map(encodeURIComponent).join("/")
 }
 
 const DEMO_REPOS: { label: string; owner: string; repo: string; githubUrl: string }[] = [
   {
-    label: 'meshtastic/firmware',
-    owner: 'meshtastic',
-    repo: 'firmware',
-    githubUrl: 'https://github.com/meshtastic/firmware',
+    label: "meshtastic/firmware",
+    owner: "meshtastic",
+    repo: "firmware",
+    githubUrl: "https://github.com/meshtastic/firmware",
   },
   {
-    label: 'meshcore-dev/MeshCore',
-    owner: 'meshcore-dev',
-    repo: 'MeshCore',
-    githubUrl: 'https://github.com/meshcore-dev/MeshCore',
+    label: "meshcore-dev/MeshCore",
+    owner: "meshcore-dev",
+    repo: "MeshCore",
+    githubUrl: "https://github.com/meshcore-dev/MeshCore",
   },
 ]
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState("")
   const [error, setError] = useState<string | null>(null)
 
   const go = () => {
     const parsed = parseGithubUrl(input)
     if (!parsed) {
-      setError('Paste a GitHub URL like https://github.com/owner/repo or owner/repo')
+      setError("Paste a GitHub URL like https://github.com/owner/repo or owner/repo")
       return
     }
     setError(null)
     const o = encodeURIComponent(parsed.owner)
     const r = encodeURIComponent(parsed.repo)
     if (parsed.treePath) {
-      const path = encodeBranchPath(parsed.treePath)
+      const path = encodeTreePath(parsed.treePath)
       navigate(`/${o}/${r}/tree/${path}`)
     } else {
       navigate(`/${o}/${r}`)
@@ -52,8 +52,8 @@ export default function HomePage() {
             Mesh Forge
           </h1>
           <p className="mt-4 text-slate-400 text-lg">
-            Browse a GitHub PlatformIO repo, scan environments, trigger a CI build — then flash the bundle over USB
-            from the same page with Web Serial (Chromium).
+            Browse a GitHub PlatformIO repo, scan environments, trigger a CI build — then flash the bundle over USB from
+            the same page with Web Serial (Chromium).
           </p>
         </div>
 
@@ -64,10 +64,10 @@ export default function HomePage() {
           <input
             id="gh-url"
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-600"
-            placeholder="https://github.com/owner/repo/tree/main"
+            placeholder="https://github.com/owner/repo/tree/v1.0.0"
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && go()}
+            onKeyDown={e => e.key === "Enter" && go()}
           />
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
           <Button className="w-full bg-cyan-600 hover:bg-cyan-700" type="button" onClick={go}>
@@ -85,9 +85,7 @@ export default function HomePage() {
                     type="button"
                     variant="ghost"
                     className="text-slate-300 hover:text-cyan-400 text-sm justify-start h-auto py-1 px-0 font-normal"
-                    onClick={() =>
-                      navigate(`/${encodeURIComponent(d.owner)}/${encodeURIComponent(d.repo)}`)
-                    }
+                    onClick={() => navigate(`/${encodeURIComponent(d.owner)}/${encodeURIComponent(d.repo)}`)}
                   >
                     Open {d.label}
                   </Button>
@@ -97,7 +95,7 @@ export default function HomePage() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {d.githubUrl.replace(/^https:\/\//, '')}
+                    {d.githubUrl.replace(/^https:\/\//, "")}
                   </a>
                 </li>
               ))}
@@ -106,8 +104,8 @@ export default function HomePage() {
         </div>
 
         <p className="text-xs text-slate-500">
-          Repo URLs: <code className="text-slate-400">/owner/repo</code> (pick branch),{' '}
-          <code className="text-slate-400">/owner/repo/tree/ref</code>, or add{' '}
+          Repo URLs: <code className="text-slate-400">/owner/repo</code> jumps to the latest SemVer tag,{" "}
+          <code className="text-slate-400">/owner/repo/tree/tag</code> pins a tag or commit ref, or add{" "}
           <code className="text-slate-400">/target/envName</code> to deep-link a PlatformIO environment.
         </p>
       </div>

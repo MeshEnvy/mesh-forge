@@ -16,10 +16,11 @@ import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
 import type * as lib_platformioScan from "../lib/platformioScan.js";
 import type * as lib_r2 from "../lib/r2.js";
-import type * as repoBranches from "../repoBranches.js";
+import type * as lib_tagSemver from "../lib/tagSemver.js";
 import type * as repoBuildDownloads from "../repoBuildDownloads.js";
 import type * as repoBuilds from "../repoBuilds.js";
 import type * as repoScans from "../repoScans.js";
+import type * as repoTags from "../repoTags.js";
 
 import type {
   ApiFromModules,
@@ -36,10 +37,11 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/platformioScan": typeof lib_platformioScan;
   "lib/r2": typeof lib_r2;
-  repoBranches: typeof repoBranches;
+  "lib/tagSemver": typeof lib_tagSemver;
   repoBuildDownloads: typeof repoBuildDownloads;
   repoBuilds: typeof repoBuilds;
   repoScans: typeof repoScans;
+  repoTags: typeof repoTags;
 }>;
 
 /**
