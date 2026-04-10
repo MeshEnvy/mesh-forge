@@ -8,12 +8,14 @@ import {
   type FlashPhase,
 } from '../lib/espFlashRun'
 import { extractTarGz } from '../lib/untarGz'
+import { CheckCircle2 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
 type FlashProgress =
   | { kind: 'indeterminate'; label: string }
   | { kind: 'determinate'; label: string; pct: number }
+  | { kind: 'complete' }
 
 const PHASE_LABEL: Record<FlashPhase, string> = {
   connect: 'Connecting to bootloader…',
@@ -64,6 +66,7 @@ export default function EspFlasher({
     }
     setBusy(true)
     setFlashProgress({ kind: 'indeterminate', label: 'Select a serial port…' })
+    let finishedOk = false
     try {
       const port = await navigator.serial.requestPort()
       setFlashProgress({ kind: 'indeterminate', label: 'Downloading firmware…' })
@@ -91,6 +94,8 @@ export default function EspFlasher({
           })
         },
       })
+      finishedOk = true
+      setFlashProgress({ kind: 'complete' })
       toast.success('Flash complete')
     } catch (e) {
       if (isSerialUserCancelledError(e)) {
@@ -100,7 +105,9 @@ export default function EspFlasher({
       toast.error('Flash failed', { description: msg })
     } finally {
       setBusy(false)
-      setFlashProgress(null)
+      if (!finishedOk) {
+        setFlashProgress(null)
+      }
     }
   }, [baud, eraseAll, noReset, prepareBundle])
 
@@ -190,19 +197,26 @@ export default function EspFlasher({
       </div>
 
       {flashProgress ? (
-        <div className="space-y-2">
-          <p className="text-xs text-slate-400">{flashProgress.label}</p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-            {flashProgress.kind === 'determinate' ? (
-              <div
-                className="h-full rounded-full bg-amber-600 transition-[width] duration-150 ease-out"
-                style={{ width: `${flashProgress.pct}%` }}
-              />
-            ) : (
-              <div className="h-full w-full rounded-full bg-amber-600/50 animate-pulse" aria-hidden />
-            )}
+        flashProgress.kind === 'complete' ? (
+          <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-950/40 px-3 py-2">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden />
+            <span className="text-sm font-medium text-emerald-300">Flashing complete</span>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-slate-400">{flashProgress.label}</p>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              {flashProgress.kind === 'determinate' ? (
+                <div
+                  className="h-full rounded-full bg-amber-600 transition-[width] duration-150 ease-out"
+                  style={{ width: `${flashProgress.pct}%` }}
+                />
+              ) : (
+                <div className="h-full w-full rounded-full bg-amber-600/50 animate-pulse" aria-hidden />
+              )}
+            </div>
+          </div>
+        )
       ) : null}
     </div>
   )
