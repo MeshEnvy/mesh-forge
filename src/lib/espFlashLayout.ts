@@ -2,6 +2,45 @@ import { findInTar, parseFlashManifest, type FlashManifest } from './untarGz'
 
 export type FlashPart = { data: Uint8Array; address: number; name: string }
 
+function tarBasename(path: string): string {
+  const parts = path.replace(/^\.\//, '').split('/')
+  return parts[parts.length - 1] ?? path
+}
+
+/**
+ * PlatformIO projects (e.g. Meshtastic) often emit versioned names like
+ * firmware-heltec-v3-2.7.20.factory.bin instead of firmware.factory.bin.
+ */
+function resolveVersionedFirmwareApp(
+  files: Map<string, Uint8Array>
+): { data: Uint8Array; name: string } | undefined {
+  type Entry = { base: string; data: Uint8Array }
+  const list: Entry[] = []
+  for (const [path, data] of files) {
+    const base = tarBasename(path)
+    const lower = base.toLowerCase()
+    if (lower.startsWith('littlefs-')) continue
+    if (
+      lower === 'bootloader.bin' ||
+      lower === 'partitions.bin' ||
+      lower === 'boot_app0.bin'
+    ) {
+      continue
+    }
+    list.push({ base, data })
+  }
+
+  const factory = list.find(e => /^firmware-.+\.factory\.bin$/i.test(e.base))
+  if (factory) return { data: factory.data, name: factory.base }
+
+  const app = list.find(
+    e => /^firmware-.+\.bin$/i.test(e.base) && !/\.factory\.bin$/i.test(e.base)
+  )
+  if (app) return { data: app.data, name: app.base }
+
+  return undefined
+}
+
 export function layoutPreviewFromManifest(m: FlashManifest): string[] {
   return m.images.map(im => `${im.file} @ ${String(im.offset)}`)
 }
@@ -28,22 +67,35 @@ export function buildFlashParts(files: Map<string, Uint8Array>): FlashPart[] | n
   const bootloader = findInTar(files, 'bootloader.bin')
   const partitions = findInTar(files, 'partitions.bin')
   const bootApp0 = findInTar(files, 'boot_app0.bin')
-  const factory = findInTar(files, 'firmware.factory.bin')
-  const firmware = findInTar(files, 'firmware.bin')
+  const factoryExact = findInTar(files, 'firmware.factory.bin')
+  const firmwareExact = findInTar(files, 'firmware.bin')
+  const versioned = resolveVersionedFirmwareApp(files)
 
-  const app = factory ?? firmware
-  if (bootloader && partitions && app) {
+  let app: Uint8Array | undefined
+  let appName: string | undefined
+  if (factoryExact) {
+    app = factoryExact
+    appName = 'firmware.factory.bin'
+  } else if (firmwareExact) {
+    app = firmwareExact
+    appName = 'firmware.bin'
+  } else if (versioned) {
+    app = versioned.data
+    appName = versioned.name
+  }
+
+  if (bootloader && partitions && app && appName) {
     const arr: FlashPart[] = [
       { data: bootloader, address: 0x1000, name: 'bootloader.bin' },
       { data: partitions, address: 0x8000, name: 'partitions.bin' },
-      { data: app, address: 0x10000, name: factory ? 'firmware.factory.bin' : 'firmware.bin' },
+      { data: app, address: 0x10000, name: appName },
     ]
     if (bootApp0) arr.push({ data: bootApp0, address: 0xe000, name: 'boot_app0.bin' })
     return arr
   }
 
-  if (app && !bootloader && !partitions) {
-    return [{ data: app, address: 0x0, name: factory ? 'firmware.factory.bin' : 'firmware.bin' }]
+  if (app && appName && !bootloader && !partitions) {
+    return [{ data: app, address: 0x0, name: appName }]
   }
 
   return null

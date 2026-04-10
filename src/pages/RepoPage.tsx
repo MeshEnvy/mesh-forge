@@ -37,7 +37,11 @@ export default function RepoPage() {
   const treePath = params["*"]
   const owner = useMemo(() => decodeURIComponent(ownerParam), [ownerParam])
   const repo = useMemo(() => decodeURIComponent(repoParam), [repoParam])
-  const { sourceRef, targetEnv: targetFromUrl } = useMemo(() => parseTreeSplat(treePath), [treePath])
+  const { sourceRef, targetEnv: targetFromUrl, flash: flashFromUrl } = useMemo(
+    () => parseTreeSplat(treePath),
+    [treePath]
+  )
+  const isFlashView = flashFromUrl
   const hasRef = Boolean(sourceRef)
 
   const tagData = useQuery(api.repoTags.get, owner && repo ? { owner, repo } : "skip")
@@ -103,6 +107,11 @@ export default function RepoPage() {
   const [readmeMd, setReadmeMd] = useState<string | null>(null)
   const [readmeDownloadUrl, setReadmeDownloadUrl] = useState<string | null>(null)
   useEffect(() => {
+    if (isFlashView) {
+      setReadmeMd(null)
+      setReadmeDownloadUrl(null)
+      return
+    }
     if (!effectiveRef) {
       setReadmeMd(null)
       setReadmeDownloadUrl(null)
@@ -127,7 +136,7 @@ export default function RepoPage() {
     return () => {
       cancelled = true
     }
-  }, [owner, repo, effectiveRef, fetchReadme])
+  }, [owner, repo, effectiveRef, fetchReadme, isFlashView])
 
   const readmeMarkdownComponents = useMemo(
     () => ({
@@ -240,6 +249,11 @@ export default function RepoPage() {
   const [flashPrep, setFlashPrep] = useState<"idle" | "loading" | "ready" | "error">("idle")
 
   useEffect(() => {
+    if (!isFlashView) {
+      setFlashUrl(null)
+      setFlashPrep("idle")
+      return
+    }
     if (!build?._id || build.status !== "succeeded") {
       setFlashUrl(null)
       setFlashPrep("idle")
@@ -262,13 +276,43 @@ export default function RepoPage() {
     return () => {
       cancelled = true
     }
-  }, [build?._id, build?.status, getSignedUrl])
+  }, [isFlashView, build?._id, build?.status, getSignedUrl])
+
+  useEffect(() => {
+    if (!isFlashView || !owner || !repo || !effectiveRef || !resolvedSha || !resolvedTargetEnv) return
+    if (!(hasRef && resolvedSha && scan?.scanStatus === "complete" && envNames.length > 0)) return
+    void ensureBuild({
+      owner,
+      repo,
+      ref: effectiveRef,
+      resolvedSourceSha: resolvedSha,
+      targetEnv: resolvedTargetEnv,
+    }).catch(e => toast.error(String(e)))
+  }, [
+    isFlashView,
+    owner,
+    repo,
+    effectiveRef,
+    resolvedSha,
+    resolvedTargetEnv,
+    hasRef,
+    scan,
+    envNames.length,
+    ensureBuild,
+  ])
 
   const queueFlashArtifacts = () => {
     if (!effectiveRef || !resolvedSha || !resolvedTargetEnv) return
+    const goFlash = () =>
+      navigate(
+        `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(effectiveRef, resolvedTargetEnv, { flash: true })}`
+      )
     if (build?.status === "failed" && build._id) {
       void retryBuild({ buildId: build._id })
-        .then(() => toast.message("Starting a new build…"))
+        .then(() => {
+          toast.message("Starting a new build…")
+          goFlash()
+        })
         .catch(e => toast.error(String(e)))
       return
     }
@@ -278,7 +322,11 @@ export default function RepoPage() {
       ref: effectiveRef,
       resolvedSourceSha: resolvedSha,
       targetEnv: resolvedTargetEnv,
-    }).catch(e => toast.error(String(e)))
+    })
+      .then(() => {
+        goFlash()
+      })
+      .catch(e => toast.error(String(e)))
   }
 
   const download = async () => {
@@ -357,9 +405,121 @@ export default function RepoPage() {
             ? "No targets"
             : "--target--"
 
+  const backToRepoPath = `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, resolvedTargetEnv || null)}`
+
+  const statusStripEl = (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+      {tagData?.isStale ? <span>Tag list may be stale.</span> : null}
+      {refError ? <span className="text-red-400">{refError}</span> : null}
+      {!refError && hasRef && !resolvedSha ? <span>Resolving tag…</span> : null}
+      {resolvedSha && (scan == null || scan.scanStatus === "in_progress") ? (
+        <span>Scanning PlatformIO…</span>
+      ) : null}
+      {resolvedSha && scan?.scanStatus === "failed" ? (
+        <span className="text-red-300">Scan failed: {scan.scanError ?? "unknown"}</span>
+      ) : null}
+    </div>
+  )
+
+  const ciAndFlasherEl = (
+    <div className="max-w-2xl space-y-4">
+      {showCiCard ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-2 text-sm">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-slate-500">CI</span>
+            <span className="text-white font-medium">{build.status}</span>
+            {build.githubRunId ? (
+              <a
+                className="text-cyan-400 hover:underline text-xs"
+                href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View run on GitHub
+              </a>
+            ) : build.status === "failed" ? (
+              <a
+                className="text-cyan-400 hover:underline text-xs"
+                href={meshForgeWorkflowUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the Mesh Forge workflow to fix YAML or inspect recent runs."
+              >
+                Mesh Forge workflow on GitHub
+              </a>
+            ) : null}
+          </div>
+          {build.status === "failed" && build.errorSummary ? (
+            <div className="space-y-2 text-xs">
+              {(() => {
+                const { headline, body } = buildFailurePresentation(build.errorSummary)
+                return (
+                  <>
+                    <p className="font-medium text-slate-200">{headline}</p>
+                    {body ? <p className="text-slate-400 leading-relaxed">{body}</p> : null}
+                    <details className="text-slate-500">
+                      <summary className="cursor-pointer select-none hover:text-slate-400">Technical details</summary>
+                      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
+                        {build.errorSummary.length > 2500
+                          ? `…${build.errorSummary.slice(-2500)}`
+                          : build.errorSummary}
+                      </pre>
+                    </details>
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
+          {build.status === "succeeded" ? (
+            <Button type="button" size="sm" variant="secondary" onClick={() => void download()}>
+              Download bundle
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {flashPrep === "loading" ? <p className="text-sm text-slate-400">Preparing USB flasher…</p> : null}
+      {flashPrep === "error" ? (
+        <p className="text-sm text-amber-200/90">
+          Could not load a signed URL for flashing. Use <strong>Download bundle</strong> if you need the file.
+        </p>
+      ) : null}
+      {flashUrl ? (
+        <EspFlasher
+          bundleUrl={flashUrl}
+          condensed
+          flashButtonLabel="USB flash"
+          flashBusyLabel="Writing…"
+          flashButtonSize="lg"
+          className="border-amber-900/50 bg-amber-950/25"
+        />
+      ) : null}
+    </div>
+  )
+
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 text-slate-200">
+    <div
+      className={`${isFlashView ? "max-w-3xl" : "max-w-6xl"} mx-auto px-6 py-10 text-slate-200`}
+    >
       <section className="rounded-2xl border border-slate-700/90 bg-slate-950/90 p-6 md:p-8 shadow-xl shadow-black/30">
+        {isFlashView ? (
+          <div className="min-w-0 space-y-5">
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-100 wrap-break-word">
+                {owner}/{repo}@{effectiveRef}
+                {resolvedTargetEnv ? ` ${resolvedTargetEnv}` : ""} Flasher
+              </h1>
+              <Link
+                to={backToRepoPath}
+                className="inline-block text-sm text-cyan-400 hover:underline"
+              >
+                ← Repository
+              </Link>
+            </div>
+            {statusStripEl}
+            {ciAndFlasherEl}
+          </div>
+        ) : (
         <div
           className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10 items-start
             [grid-template-areas:'repo-main''repo-aside''repo-readme']
@@ -382,7 +542,7 @@ export default function RepoPage() {
                     return
                   }
                   if (tagOptions.includes(v)) {
-                    navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, null)}`)
+                    navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, targetFromUrl)}`)
                   }
                 }}
                 disabled={tagOptions.length === 0}
@@ -435,93 +595,7 @@ export default function RepoPage() {
               </Button>
             </div>
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-              {tagData?.isStale ? <span>Tag list may be stale.</span> : null}
-              {refError ? <span className="text-red-400">{refError}</span> : null}
-              {!refError && hasRef && !resolvedSha ? <span>Resolving tag…</span> : null}
-              {resolvedSha && (scan == null || scan.scanStatus === "in_progress") ? (
-                <span>Scanning PlatformIO…</span>
-              ) : null}
-              {resolvedSha && scan?.scanStatus === "failed" ? (
-                <span className="text-red-300">Scan failed: {scan.scanError ?? "unknown"}</span>
-              ) : null}
-            </div>
-
-            <div className="max-w-2xl space-y-4">
-              {showCiCard ? (
-                <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-2 text-sm">
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-slate-500">CI</span>
-                    <span className="text-white font-medium">{build.status}</span>
-                    {build.githubRunId ? (
-                      <a
-                        className="text-cyan-400 hover:underline text-xs"
-                        href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View run on GitHub
-                      </a>
-                    ) : build.status === "failed" ? (
-                      <a
-                        className="text-cyan-400 hover:underline text-xs"
-                        href={meshForgeWorkflowUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the Mesh Forge workflow to fix YAML or inspect recent runs."
-                      >
-                        Mesh Forge workflow on GitHub
-                      </a>
-                    ) : null}
-                  </div>
-                  {build.status === "failed" && build.errorSummary ? (
-                    <div className="space-y-2 text-xs">
-                      {(() => {
-                        const { headline, body } = buildFailurePresentation(build.errorSummary)
-                        return (
-                          <>
-                            <p className="font-medium text-slate-200">{headline}</p>
-                            {body ? <p className="text-slate-400 leading-relaxed">{body}</p> : null}
-                            <details className="text-slate-500">
-                              <summary className="cursor-pointer select-none hover:text-slate-400">
-                                Technical details
-                              </summary>
-                              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
-                                {build.errorSummary.length > 2500
-                                  ? `…${build.errorSummary.slice(-2500)}`
-                                  : build.errorSummary}
-                              </pre>
-                            </details>
-                          </>
-                        )
-                      })()}
-                    </div>
-                  ) : null}
-                  {build.status === "succeeded" ? (
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void download()}>
-                      Download bundle
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {flashPrep === "loading" ? <p className="text-sm text-slate-400">Preparing USB flasher…</p> : null}
-              {flashPrep === "error" ? (
-                <p className="text-sm text-amber-200/90">
-                  Could not load a signed URL for flashing. Use <strong>Download bundle</strong> if you need the file.
-                </p>
-              ) : null}
-              {flashUrl ? (
-                <EspFlasher
-                  bundleUrl={flashUrl}
-                  condensed
-                  flashButtonLabel="USB flash"
-                  flashBusyLabel="Writing…"
-                  flashButtonSize="lg"
-                  className="border-amber-900/50 bg-amber-950/25"
-                />
-              ) : null}
-            </div>
+            {statusStripEl}
           </div>
 
           <aside className="[grid-area:repo-aside] border-b border-slate-800 pb-8 lg:border-b-0 lg:border-l lg:border-slate-800 lg:pb-0 lg:pl-8 space-y-4">
@@ -603,6 +677,7 @@ export default function RepoPage() {
             )}
           </div>
         </div>
+        )}
       </section>
     </div>
   )

@@ -1,9 +1,25 @@
 import { Button } from '@/components/ui/button'
-import { buildFlashParts, layoutPreviewFromManifest, manifestFromMap, type FlashManifest } from '../lib/espFlashLayout'
-import { pulseUsbBootloaderPort, runEspFlash } from '../lib/espFlashRun'
-import { extractTarGz, findInTar } from '../lib/untarGz'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { buildFlashParts, layoutPreviewFromManifest, manifestFromMap } from '../lib/espFlashLayout'
+import type { FlashManifest } from '../lib/untarGz'
+import {
+  isSerialUserCancelledError,
+  pulseUsbBootloaderPort,
+  runEspFlash,
+  type FlashPhase,
+} from '../lib/espFlashRun'
+import { extractTarGz } from '../lib/untarGz'
+import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
+
+type FlashProgress =
+  | { kind: 'indeterminate'; label: string }
+  | { kind: 'determinate'; label: string; pct: number }
+
+const PHASE_LABEL: Record<FlashPhase, string> = {
+  connect: 'Connecting to bootloader…',
+  detect: 'Detecting flash size…',
+  write: 'Writing firmware…',
+}
 
 type EspFlasherProps = {
   bundleUrl: string
@@ -29,26 +45,7 @@ export default function EspFlasher({
   const [noReset, setNoReset] = useState(false)
   const [baud, setBaud] = useState(921600)
   const [layoutPreview, setLayoutPreview] = useState<FlashManifest | null>(null)
-  const [log, setLog] = useState('')
-  const logRef = useRef('')
-
-  const terminal = useMemo(
-    () => ({
-      clean: () => {
-        logRef.current = ''
-        setLog('')
-      },
-      write: (data: string) => {
-        logRef.current += data
-        setLog(logRef.current)
-      },
-      writeLine: (data: string) => {
-        logRef.current += data + '\n'
-        setLog(logRef.current)
-      },
-    }),
-    []
-  )
+  const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
 
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
@@ -66,32 +63,46 @@ export default function EspFlasher({
       return
     }
     setBusy(true)
-    terminal.clean()
+    setFlashProgress({ kind: 'indeterminate', label: 'Select a serial port…' })
     try {
+      const port = await navigator.serial.requestPort()
+      setFlashProgress({ kind: 'indeterminate', label: 'Downloading firmware…' })
       const files = await prepareBundle()
       const parts = buildFlashParts(files)
       if (!parts) {
         toast.error('Could not detect flash layout from bundle')
-        setBusy(false)
         return
       }
 
       await runEspFlash({
+        port,
         parts,
         baud,
         eraseAll,
-        terminal,
         resetMode: noReset ? 'no_reset' : 'default_reset',
+        onPhase: phase => {
+          setFlashProgress({ kind: 'indeterminate', label: PHASE_LABEL[phase] })
+        },
+        onWriteProgress: p => {
+          setFlashProgress({
+            kind: 'determinate',
+            label: `Writing firmware (${p.imageIndex + 1}/${p.imageCount})`,
+            pct: p.overallPct,
+          })
+        },
       })
       toast.success('Flash complete')
     } catch (e) {
+      if (isSerialUserCancelledError(e)) {
+        return
+      }
       const msg = e instanceof Error ? e.message : String(e)
-      terminal.writeLine(`\nError: ${msg}`)
       toast.error('Flash failed', { description: msg })
     } finally {
       setBusy(false)
+      setFlashProgress(null)
     }
-  }, [baud, eraseAll, noReset, prepareBundle, terminal])
+  }, [baud, eraseAll, noReset, prepareBundle])
 
   const boot1200 = useCallback(async () => {
     try {
@@ -100,6 +111,9 @@ export default function EspFlasher({
         description: 'If the board did not enter bootloader, hold BOOT, tap RST, then try flash again.',
       })
     } catch (e) {
+      if (isSerialUserCancelledError(e)) {
+        return
+      }
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }, [])
@@ -175,10 +189,20 @@ export default function EspFlasher({
         </Button>
       </div>
 
-      {log ? (
-        <pre className="text-xs text-slate-400 max-h-48 overflow-auto whitespace-pre-wrap bg-black/40 p-2 rounded">
-          {log}
-        </pre>
+      {flashProgress ? (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-400">{flashProgress.label}</p>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+            {flashProgress.kind === 'determinate' ? (
+              <div
+                className="h-full rounded-full bg-amber-600 transition-[width] duration-150 ease-out"
+                style={{ width: `${flashProgress.pct}%` }}
+              />
+            ) : (
+              <div className="h-full w-full rounded-full bg-amber-600/50 animate-pulse" aria-hidden />
+            )}
+          </div>
+        </div>
       ) : null}
     </div>
   )

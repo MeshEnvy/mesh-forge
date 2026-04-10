@@ -1,25 +1,58 @@
-import { ESPLoader, Transport } from 'esptool-js'
+import { ESPLoader, Transport, type FlashSizeValues } from 'esptool-js'
 import type { FlashPart } from './espFlashLayout'
 
-type EspTerminal = {
+export type EspTerminal = {
   clean: () => void
   write: (data: string) => void
   writeLine: (data: string) => void
 }
 
+export const noopEspTerminal: EspTerminal = {
+  clean: () => {},
+  write: () => {},
+  writeLine: () => {},
+}
+
+export function isSerialUserCancelledError(e: unknown): boolean {
+  if (e instanceof DOMException && e.name === 'NotFoundError') return true
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.includes('No port selected')
+}
+
+export type FlashPhase = 'connect' | 'detect' | 'write'
+
+export type WriteProgressPayload = {
+  imageIndex: number
+  imageCount: number
+  written: number
+  total: number
+  overallPct: number
+}
+
 export async function runEspFlash(options: {
   parts: FlashPart[]
+  port: SerialPort
   baud: number
   eraseAll: boolean
-  terminal: EspTerminal
+  terminal?: EspTerminal
   resetMode?: 'default_reset' | 'no_reset'
+  onPhase?: (phase: FlashPhase) => void
+  onWriteProgress?: (p: WriteProgressPayload) => void
 }): Promise<void> {
-  const { parts, baud, eraseAll, terminal, resetMode = 'default_reset' } = options
+  const {
+    parts,
+    port,
+    baud,
+    eraseAll,
+    terminal = noopEspTerminal,
+    resetMode = 'default_reset',
+    onPhase,
+    onWriteProgress,
+  } = options
   if (!('serial' in navigator)) {
     throw new Error('Web Serial is not available (use Chromium on https:// or localhost)')
   }
 
-  const port = await navigator.serial.requestPort()
   const transport = new Transport(port)
   const loader = new ESPLoader({
     transport,
@@ -28,10 +61,15 @@ export async function runEspFlash(options: {
   })
 
   const fileArray = parts.map(p => ({ data: p.data, address: p.address }))
+  const lengths = fileArray.map(f => f.data.byteLength)
+  const totalBytes = lengths.reduce((a, b) => a + b, 0)
 
+  onPhase?.('connect')
   await loader.main(resetMode)
-  const flashSize = await loader.detectFlashSize()
+  onPhase?.('detect')
+  const flashSize = (await loader.detectFlashSize()) as FlashSizeValues
 
+  onPhase?.('write')
   await loader.writeFlash({
     fileArray,
     flashMode: 'dio',
@@ -40,7 +78,17 @@ export async function runEspFlash(options: {
     eraseAll,
     compress: true,
     reportProgress: (i, written, total) => {
-      loader.info(`Image ${i + 1}/${fileArray.length}: ${Math.round((100 * written) / total)}%`)
+      let offset = 0
+      for (let j = 0; j < i; j++) offset += lengths[j] ?? 0
+      const overallPct =
+        totalBytes > 0 ? Math.min(100, Math.round((100 * (offset + written)) / totalBytes)) : 0
+      onWriteProgress?.({
+        imageIndex: i,
+        imageCount: fileArray.length,
+        written,
+        total,
+        overallPct,
+      })
     },
   })
 

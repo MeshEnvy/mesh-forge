@@ -5,7 +5,7 @@
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "w3c-web-serial"],
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
