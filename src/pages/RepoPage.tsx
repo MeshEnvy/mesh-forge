@@ -425,30 +425,77 @@ export default function RepoPage() {
     <div className="max-w-2xl space-y-4">
       {showCiCard ? (
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-2 text-sm">
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-slate-500">CI</span>
-            <span className="text-white font-medium">{build.status}</span>
-            {build.githubRunId ? (
-              <a
-                className="text-cyan-400 hover:underline text-xs"
-                href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View run on GitHub
-              </a>
-            ) : build.status === "failed" ? (
-              <a
-                className="text-cyan-400 hover:underline text-xs"
-                href={meshForgeWorkflowUrl}
-                target="_blank"
-                rel="noreferrer"
-                title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the Mesh Forge workflow to fix YAML or inspect recent runs."
-              >
-                Mesh Forge workflow on GitHub
-              </a>
-            ) : null}
-          </div>
+          {build.githubRunId || build.status === "failed" ? (
+            <div className="flex flex-wrap gap-2 items-center">
+              {build.githubRunId ? (
+                <a
+                  className="text-cyan-400 hover:underline text-xs"
+                  href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View run on GitHub
+                </a>
+              ) : (
+                <a
+                  className="text-cyan-400 hover:underline text-xs"
+                  href={meshForgeWorkflowUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the Mesh Forge workflow to fix YAML or inspect recent runs."
+                >
+                  Mesh Forge workflow on GitHub
+                </a>
+              )}
+            </div>
+          ) : null}
+          {!isFlashView && buildInProgress && !build.githubRunId ? (
+            <p className="text-xs text-slate-400">Waiting for workflow to start…</p>
+          ) : null}
+          {isFlashView && buildInProgress ? (
+            <div className="space-y-2 pt-1">
+              {(() => {
+                const step = build.ciProgressStep
+                const total = build.ciProgressTotal
+                const label = build.ciProgressLabel
+                const hasSteps =
+                  typeof step === "number" &&
+                  typeof total === "number" &&
+                  total > 0 &&
+                  step >= 1 &&
+                  step <= total
+                const pct = hasSteps ? Math.min(100, Math.round((step / total) * 100)) : null
+                return (
+                  <>
+                    <div
+                      className={`relative h-2.5 w-full overflow-hidden rounded-full bg-slate-800/90 ${
+                        pct === null ? "animate-pulse" : ""
+                      }`}
+                    >
+                      {pct !== null ? (
+                        <div
+                          className="h-full rounded-full bg-linear-to-r from-cyan-600 to-emerald-500 transition-[width] duration-500 ease-out shadow-[0_0_12px_rgba(34,211,238,0.35)]"
+                          style={{ width: `${pct}%` }}
+                        />
+                      ) : (
+                        <div className="ci-progress-shimmer-x top-0 h-full w-[42%] rounded-full bg-linear-to-r from-cyan-700/85 via-emerald-400/95 to-cyan-700/85 shadow-[0_0_10px_rgba(52,211,153,0.4)]" />
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {hasSteps ? (
+                        <>
+                          Step {step} of {total}
+                          {label ? ` · ${label}` : ""}
+                        </>
+                      ) : (
+                        <>Waiting for CI progress…</>
+                      )}
+                    </p>
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
           {build.status === "failed" && build.errorSummary ? (
             <div className="space-y-2 text-xs">
               {(() => {

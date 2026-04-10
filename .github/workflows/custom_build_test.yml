@@ -35,6 +35,7 @@ jobs:
       CONVEX_URL: ${{ inputs.convex_url }}
       REPO_BUILD_ID: ${{ inputs.repo_build_id }}
       CONVEX_BUILD_TOKEN: ${{ secrets.CONVEX_BUILD_TOKEN }}
+      CI_PROGRESS_TOTAL: "5"
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +47,13 @@ jobs:
             -H "Authorization: Bearer $CONVEX_BUILD_TOKEN" \
             -d "{\"repo_build_id\":\"$REPO_BUILD_ID\",\"state\":\"running\",\"github_run_id\":${{ github.run_id }}}"
 
+      - name: CI progress — build started
+        shell: bash
+        env:
+          STEP_INDEX: 1
+          LABEL: Build started on Actions
+        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -56,6 +64,13 @@ jobs:
         with:
           bun-version: latest
 
+      - name: CI progress — tooling ready
+        shell: bash
+        env:
+          STEP_INDEX: 2
+          LABEL: Runner tooling ready
+        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+
       - name: Download source archive
         shell: bash
         env:
@@ -63,6 +78,7 @@ jobs:
           REPO: ${{ inputs.repo }}
           REF: ${{ inputs.ref }}
         run: |
+          STEP_INDEX=3 LABEL="Downloading source archive" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
           ENC_REF=$(python3 -c "import urllib.parse,os; print(urllib.parse.quote(os.environ['REF'], safe=''))")
           curl -fsSL -o /tmp/src.zip "https://codeload.github.com/${OWNER}/${REPO}/zip/${ENC_REF}"
 
@@ -74,6 +90,7 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         shell: bash
         run: |
+          STEP_INDEX=4 LABEL="Building firmware (PlatformIO)" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq unzip
           unzip -q /tmp/src.zip -d /tmp/src
@@ -107,6 +124,7 @@ jobs:
           tar -czf "/tmp/$ARTIFACT_NAME" -C "$STAGE" .
           OBJECT_PATH="${R2_BUCKET_NAME}/${ARTIFACT_NAME}"
           bunx wrangler r2 object put "$OBJECT_PATH" --file "/tmp/$ARTIFACT_NAME" --remote
+          STEP_INDEX=5 LABEL="Firmware bundle uploaded" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
           echo "r2_key=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Notify Convex — success

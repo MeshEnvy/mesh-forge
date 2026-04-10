@@ -56,6 +56,40 @@ http.route({
   }),
 })
 
+http.route({
+  path: "/ingest-repo-build-progress",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (!verifyBearer(request)) {
+      return new Response("Unauthorized", { status: 401 })
+    }
+    const payload = (await request.json()) as {
+      repo_build_id?: string
+      step_index?: number
+      step_total?: number
+      label?: string
+    }
+
+    if (
+      !payload.repo_build_id ||
+      typeof payload.step_index !== "number" ||
+      typeof payload.step_total !== "number" ||
+      typeof payload.label !== "string"
+    ) {
+      return new Response("Missing repo_build_id, step_index, step_total, or label", { status: 400 })
+    }
+
+    await ctx.runMutation(internal.repoBuilds.patchCiProgress, {
+      buildId: payload.repo_build_id as Id<"repoBuilds">,
+      stepIndex: payload.step_index,
+      stepTotal: payload.step_total,
+      label: payload.label,
+    })
+
+    return new Response(null, { status: 200 })
+  }),
+})
+
 /** Legacy: old workflows posting build_id + state */
 http.route({
   path: "/github-webhook",

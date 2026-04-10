@@ -91,8 +91,38 @@ export const patchFromWebhook = internalMutation({
     if (args.errorSummary !== undefined) patch.errorSummary = args.errorSummary
     if (args.status === "succeeded" || args.status === "failed") {
       patch.completedAt = Date.now()
+      patch.ciProgressStep = undefined
+      patch.ciProgressTotal = undefined
+      patch.ciProgressLabel = undefined
     }
     await ctx.db.patch(args.buildId, patch)
+  },
+})
+
+export const patchCiProgress = internalMutation({
+  args: {
+    buildId: v.id("repoBuilds"),
+    stepIndex: v.number(),
+    stepTotal: v.number(),
+    label: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.buildId)
+    if (!doc) {
+      return
+    }
+    if (doc.status === "succeeded" || doc.status === "failed") {
+      return
+    }
+    if (args.stepTotal < 1 || args.stepIndex < 1 || args.stepIndex > args.stepTotal) {
+      return
+    }
+    await ctx.db.patch(args.buildId, {
+      ciProgressStep: args.stepIndex,
+      ciProgressTotal: args.stepTotal,
+      ciProgressLabel: args.label,
+      updatedAt: Date.now(),
+    })
   },
 })
 
@@ -104,6 +134,9 @@ export const logBuildDispatchError = internalMutation({
       errorSummary: args.message,
       updatedAt: Date.now(),
       completedAt: Date.now(),
+      ciProgressStep: undefined,
+      ciProgressTotal: undefined,
+      ciProgressLabel: undefined,
     })
   },
 })

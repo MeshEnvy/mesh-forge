@@ -49,6 +49,10 @@ export const repoBuildsFields = {
   githubRunId: v.optional(v.number()),
   r2ObjectKey: v.optional(v.string()),
   errorSummary: v.optional(v.string()),
+  /** CI workflow progress (1-based step / total + label), pushed via /ingest-repo-build-progress. */
+  ciProgressStep: v.optional(v.number()),
+  ciProgressTotal: v.optional(v.number()),
+  ciProgressLabel: v.optional(v.string()),
 }
 
 export const deviceReportFields = {

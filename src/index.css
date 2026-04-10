@@ -96,3 +96,17 @@
   padding: 1rem;
   overflow-x: auto;
 }
+
+@keyframes ci-progress-shimmer-x {
+  0% {
+    left: -45%;
+  }
+  100% {
+    left: 105%;
+  }
+}
+
+.ci-progress-shimmer-x {
+  position: absolute;
+  animation: ci-progress-shimmer-x 1.45s ease-in-out infinite;
+}
