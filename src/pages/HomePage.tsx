@@ -1,3 +1,4 @@
+import logo from "@/assets/logo.png"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -47,20 +48,23 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col items-center justify-center px-6 py-16">
       <div className="max-w-xl w-full text-center space-y-8">
-        <div>
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
-            Mesh Forge
-          </h1>
-          <p className="mt-4 text-slate-400 text-lg">
-            Browse a GitHub PlatformIO repo, scan environments, trigger a CI build — then flash the bundle over USB from
-            the same page with Web Serial (Chromium).
-          </p>
+        <div className="space-y-5">
+          <div className="flex justify-center">
+            <div className="rounded-2xl bg-slate-100 p-4 md:p-5 shadow-lg shadow-black/25 ring-1 ring-white/10">
+              <img src={logo} alt="Mesh Forge" className="h-20 w-auto md:h-24" width={120} height={120} />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
+              Mesh Forge
+            </h1>
+            <p className="mt-3 text-slate-200 text-lg md:text-xl font-medium leading-snug">
+              An open ecosystem and web flasher for mesh plugins, extensions, and firmware.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-3 text-left">
-          <label htmlFor="gh-url" className="block text-sm text-slate-400">
-            GitHub repository URL
-          </label>
           <input
             id="gh-url"
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-600"
@@ -71,7 +75,7 @@ export default function HomePage() {
           />
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
           <Button className="w-full bg-cyan-600 hover:bg-cyan-700" type="button" onClick={go}>
-            Open repository
+            Open a firmware repo
           </Button>
           <div className="pt-2 space-y-2">
             <p className="text-xs text-slate-500 text-center">Try a demo</p>
@@ -102,12 +106,6 @@ export default function HomePage() {
             </ul>
           </div>
         </div>
-
-        <p className="text-xs text-slate-500">
-          Repo URLs: <code className="text-slate-400">/owner/repo</code> jumps to the latest SemVer tag,{" "}
-          <code className="text-slate-400">/owner/repo/tree/tag</code> pins a tag or commit ref, or add{" "}
-          <code className="text-slate-400">/target/envName</code> to deep-link a PlatformIO environment.
-        </p>
       </div>
     </div>
   )
