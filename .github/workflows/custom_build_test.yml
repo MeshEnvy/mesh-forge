@@ -174,34 +174,44 @@ jobs:
           BUILD_DIR=".pio/build/${{ inputs.target_env }}"
           bash "${{ github.workspace }}/scripts/download-meshtastic-ota.sh" "$ROOT/$BUILD_DIR"
 
-      - name: Generate nRF52 DFU init packet (if applicable)
+      - name: Stage or generate nRF52 DFU files (if applicable)
         shell: bash
         run: |
           set -e
           ROOT=$(cat /tmp/fw-src-root.txt)
           BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
-          # Only runs for nRF52 builds — detected by .uf2 output from PlatformIO
-          if ! ls "$BUILD_DIR"/*.uf2 >/dev/null 2>&1; then
-            echo "No .uf2 output; skipping nRF52 DFU init packet generation"
-            exit 0
+
+          # MeshCore layout: PlatformIO puts bin/dat/manifest.json in a firmware/ subdirectory.
+          # Flatten them into the build root so the bundle packaging picks them up.
+          if [ -d "$BUILD_DIR/firmware" ]; then
+            echo "Found firmware/ subdirectory; staging nRF52 DFU files to build root"
+            shopt -s nullglob
+            for f in "$BUILD_DIR/firmware/"*.bin "$BUILD_DIR/firmware/"*.dat; do
+              cp -a "$f" "$BUILD_DIR/"
+            done
+            shopt -u nullglob
+            [ -f "$BUILD_DIR/firmware/manifest.json" ] && cp -a "$BUILD_DIR/firmware/manifest.json" "$BUILD_DIR/"
           fi
-          FW_BIN="$BUILD_DIR/firmware.bin"
-          if [ ! -f "$FW_BIN" ]; then
-            echo "firmware.bin not found in build dir; skipping DFU init packet"
-            exit 0
+
+          # Meshtastic / generic UF2 layout: generate .dat init packet if .uf2 exists but no .dat yet.
+          if ls "$BUILD_DIR"/*.uf2 >/dev/null 2>&1 && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
+            FW_BIN="$BUILD_DIR/firmware.bin"
+            if [ ! -f "$FW_BIN" ]; then
+              echo "firmware.bin not found; skipping DFU init packet generation"
+              exit 0
+            fi
+            echo "nRF52 UF2 build: generating DFU init packet from firmware.bin"
+            pip install -q adafruit-nrfutil
+            adafruit-nrfutil dfu genpkg \
+              --dev-type 0xFFFF \
+              --dev-revision 0xFFFF \
+              --application-version 0xFFFFFFFF \
+              --sd-req 0xFFFE \
+              --application "$FW_BIN" \
+              /tmp/nrf52-dfu.zip
+            unzip -j /tmp/nrf52-dfu.zip "*.dat" -d "$BUILD_DIR/"
+            echo "DFU init packet written: $(ls "$BUILD_DIR"/*.dat 2>/dev/null || echo '(none)')"
           fi
-          echo "nRF52 build: generating DFU init packet from firmware.bin"
-          pip install -q adafruit-nrfutil
-          adafruit-nrfutil dfu genpkg \
-            --dev-type 0xFFFF \
-            --dev-revision 0xFFFF \
-            --application-version 0xFFFFFFFF \
-            --sd-req 0xFFFE \
-            --application "$FW_BIN" \
-            /tmp/nrf52-dfu.zip
-          # Extract only the .dat init packet; firmware.bin is already in the build dir
-          unzip -j /tmp/nrf52-dfu.zip "*.dat" -d "$BUILD_DIR/"
-          echo "DFU init packet written: $(ls "$BUILD_DIR"/*.dat 2>/dev/null || echo '(none)')"
 
       - name: Package and upload firmware bundle
         id: pio
@@ -228,6 +238,10 @@ jobs:
           shopt -u nullglob
           if [ -f "$BUILD_DIR/flash-manifest.json" ]; then
             cp -a "$BUILD_DIR/flash-manifest.json" "$STAGE/"
+          fi
+          # Nordic DFU manifest (MeshCore and other nRF52 builds)
+          if [ -f "$BUILD_DIR/manifest.json" ]; then
+            cp -a "$BUILD_DIR/manifest.json" "$STAGE/"
           fi
           bash "${{ github.workspace }}/scripts/stage-fw-bundle-docs.sh" "$ROOT" "$STAGE"
           if [ -z "$(find "$STAGE" -mindepth 1 -maxdepth 1 -type f -print -quit)" ]; then
