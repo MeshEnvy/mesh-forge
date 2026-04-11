@@ -5,7 +5,10 @@ import { createRoot } from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
 import { Toaster } from "sonner"
 import App from "./App"
+import { bootstrapAppHead } from "./bootstrapAppHead"
 import "./index.css"
+
+bootstrapAppHead()
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string)
 
