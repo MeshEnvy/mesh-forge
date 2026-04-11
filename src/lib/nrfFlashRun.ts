@@ -32,6 +32,9 @@ function pickDirectory(): Promise<FileSystemDirectoryHandle> {
  * Build an nRF52 flash plan from the bundle tarball + parsed manifest.
  * Reads the `update` section for a normal flash, or `factory` when factoryInstall is true.
  * Images with role "uf2" are the firmware; role "nuke" is the erase-all UF2.
+ *
+ * Falls back to scanning the bundle directly for *.uf2 when no manifest is present
+ * (covers pre-manifest bundles and builds where emit-flash-manifest.py did not run).
  */
 export function buildNrfPlan(
   files: Map<string, Uint8Array>,
@@ -39,26 +42,46 @@ export function buildNrfPlan(
   factoryInstall: boolean
 ): NrfFlashPlan | null {
   const section = factoryInstall ? (manifest?.factory ?? manifest?.update) : manifest?.update
-  if (!section?.images?.length) return null
 
-  let firmwareFile: Uint8Array | undefined
-  let firmwareName: string | undefined
-  let nukeFile: Uint8Array | undefined
+  if (section?.images?.length) {
+    let firmwareFile: Uint8Array | undefined
+    let firmwareName: string | undefined
+    let nukeFile: Uint8Array | undefined
 
-  for (const img of section.images) {
-    const role = img.role?.toLowerCase()
-    if (role === 'nuke') {
-      nukeFile = findInTar(files, img.file)
-    } else if (role === 'uf2' || img.file.toLowerCase().endsWith('.uf2')) {
-      if (!firmwareFile) {
-        firmwareFile = findInTar(files, img.file)
-        firmwareName = img.file
+    for (const img of section.images) {
+      const role = img.role?.toLowerCase()
+      if (role === 'nuke') {
+        nukeFile = findInTar(files, img.file)
+      } else if (role === 'uf2' || img.file.toLowerCase().endsWith('.uf2')) {
+        if (!firmwareFile) {
+          firmwareFile = findInTar(files, img.file)
+          firmwareName = img.file
+        }
       }
+    }
+
+    if (firmwareFile && firmwareName) {
+      return { firmwareFile, firmwareName, nukeFile }
     }
   }
 
-  if (!firmwareFile || !firmwareName) return null
-  return { firmwareFile, firmwareName, nukeFile }
+  // Fallback: scan bundle files directly for *.uf2 (no manifest or manifest had no UF2 images).
+  // Prefer names starting with "firmware", exclude nuke.uf2.
+  let fallbackName: string | undefined
+  let fallbackData: Uint8Array | undefined
+  for (const [path, data] of files) {
+    const base = path.replace(/^.*\//, '')
+    const baseLower = base.toLowerCase()
+    if (!baseLower.endsWith('.uf2') || baseLower === 'nuke.uf2') continue
+    if (!fallbackName || baseLower.startsWith('firmware')) {
+      fallbackName = base
+      fallbackData = data
+      if (baseLower.startsWith('firmware')) break
+    }
+  }
+
+  if (!fallbackData || !fallbackName) return null
+  return { firmwareFile: fallbackData, firmwareName: fallbackName }
 }
 
 /**

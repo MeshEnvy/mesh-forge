@@ -318,8 +318,8 @@ export default function EspFlasher({
 
       {!hasFactorySection ? (
         <p className="text-xs text-amber-300/90">
-          Full device reset is not available for this bundle—only an update. Typical reasons: an older download, a
-          build that did not include a factory image, or firmware not produced by this app’s usual ESP32 flow.
+          Full device reset is not available for this bundle—only an update. Typical reasons: an older download, or a
+          build that did not include a factory image.
         </p>
       ) : null}
 
