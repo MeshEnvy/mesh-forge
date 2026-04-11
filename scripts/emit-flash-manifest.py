@@ -505,15 +505,35 @@ def main() -> int:
         print(f"Wrote {out_path} (update + {'factory' if 'factory' in merged_doc else 'no factory'})")
         return 0
 
-    # Path 3: generic nRF52 (UF2 output)
+    # Path 3: generic nRF52 — UF2 bootloader builds or Nordic DFU (bin + dat) builds
     if pio_family == "nrf52":
+        # 3a: UF2 output (Meshtastic and other UF2-bootloader boards)
         doc = emit_generic_nrf52(names)
         if doc:
             merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
             _write_manifest(out_path, merged_doc)
             print(f"Wrote {out_path} (nRF52 UF2, update + {'factory' if 'factory' in merged_doc else 'no factory'})")
             return 0
-        print("nRF52 target but no *.uf2 found in BUILD_DIR; skipping manifest", file=sys.stderr)
+
+        # 3b: Nordic DFU bin + dat output (MeshCore and similar PlatformIO nRF52 builds).
+        # The browser uses manifest.json (Nordic format) directly for the DFU protocol;
+        # flash-manifest.json here just records targetFamily for the UI.
+        if "firmware.bin" in names and "firmware.dat" in names:
+            doc = {
+                "update": {
+                    "images": [
+                        {"file": "firmware.bin", "offset": 0, "role": "dfu-bin"},
+                        {"file": "firmware.dat", "offset": 0, "role": "dfu-dat"},
+                    ],
+                    "eraseFlash": False,
+                }
+            }
+            merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
+            _write_manifest(out_path, merged_doc)
+            print(f"Wrote {out_path} (nRF52 Nordic DFU)")
+            return 0
+
+        print("nRF52 target but no flashable files found in BUILD_DIR; skipping manifest", file=sys.stderr)
         return 0
 
     # Path 4: generic ESP32 (standard PlatformIO bin output)

@@ -135,7 +135,7 @@ jobs:
           ROOT=$(cat /tmp/fw-src-root.txt)
           cd "$ROOT"
           python -m pip install -q --upgrade pip
-          pip install -q platformio
+          pip install -q platformio adafruit-nrfutil
 
       - name: Install PlatformIO dependencies
         shell: bash
@@ -181,9 +181,15 @@ jobs:
           ROOT=$(cat /tmp/fw-src-root.txt)
           BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
 
-          # MeshCore layout: PlatformIO puts bin/dat/manifest.json in a firmware/ subdirectory.
-          # Flatten them into the build root so the bundle packaging picks them up.
-          if [ -d "$BUILD_DIR/firmware" ]; then
+          # Path 1: MeshCore produces firmware.zip (Nordic DFU package) when adafruit-nrfutil
+          # is available during pio run. Unzip it to get bin/dat/manifest.json at build root.
+          if [ -f "$BUILD_DIR/firmware.zip" ]; then
+            echo "Found firmware.zip; extracting Nordic DFU files to build root"
+            unzip -j "$BUILD_DIR/firmware.zip" "*.bin" "*.dat" "manifest.json" -d "$BUILD_DIR/" || true
+          fi
+
+          # Path 2: firmware/ subdirectory fallback (local builds or alternate PIO layouts).
+          if [ -d "$BUILD_DIR/firmware" ] && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
             echo "Found firmware/ subdirectory; staging nRF52 DFU files to build root"
             shopt -s nullglob
             for f in "$BUILD_DIR/firmware/"*.bin "$BUILD_DIR/firmware/"*.dat; do
@@ -193,21 +199,16 @@ jobs:
             [ -f "$BUILD_DIR/firmware/manifest.json" ] && cp -a "$BUILD_DIR/firmware/manifest.json" "$BUILD_DIR/"
           fi
 
-          # Meshtastic / generic UF2 layout: generate .dat init packet if .uf2 exists but no .dat yet.
-          if ls "$BUILD_DIR"/*.uf2 >/dev/null 2>&1 && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
-            FW_BIN="$BUILD_DIR/firmware.bin"
-            if [ ! -f "$FW_BIN" ]; then
-              echo "firmware.bin not found; skipping DFU init packet generation"
-              exit 0
-            fi
-            echo "nRF52 UF2 build: generating DFU init packet from firmware.bin"
-            pip install -q adafruit-nrfutil
+          # Path 3: firmware.bin present but still no .dat (Meshtastic UF2 builds, or MeshCore
+          # when the post-build script did not produce firmware.zip). Generate init packet.
+          if [ -f "$BUILD_DIR/firmware.bin" ] && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
+            echo "firmware.bin found but no .dat; generating DFU init packet"
             adafruit-nrfutil dfu genpkg \
               --dev-type 0xFFFF \
               --dev-revision 0xFFFF \
               --application-version 0xFFFFFFFF \
               --sd-req 0xFFFE \
-              --application "$FW_BIN" \
+              --application "$BUILD_DIR/firmware.bin" \
               /tmp/nrf52-dfu.zip
             unzip -j /tmp/nrf52-dfu.zip "*.dat" -d "$BUILD_DIR/"
             echo "DFU init packet written: $(ls "$BUILD_DIR"/*.dat 2>/dev/null || echo '(none)')"
