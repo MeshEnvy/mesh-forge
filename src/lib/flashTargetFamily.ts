@@ -1,13 +1,7 @@
-import type { FlashManifest, FlashTargetFamily } from "./untarGz"
+import type { FlashTargetFamily } from "./untarGz"
 
-const KNOWN: readonly FlashTargetFamily[] = ["esp32", "esp8266", "nrf52", "rp2040", "unknown"]
 
-function coerceTargetFamily(v: unknown): FlashTargetFamily | undefined {
-  if (typeof v !== "string") return undefined
-  return KNOWN.includes(v as FlashTargetFamily) ? (v as FlashTargetFamily) : undefined
-}
-
-/** Heuristic when manifest lacks targetFamily (older bundles). */
+/** Heuristic when bundle file types are ambiguous (e.g. UF2 shared by nRF52 and RP2040). */
 export function inferTargetFamilyFromEnv(env: string | null | undefined): FlashTargetFamily | null {
   if (!env?.trim()) return null
   const e = env.toLowerCase()
@@ -27,22 +21,39 @@ export function inferTargetFamilyFromEnv(env: string | null | undefined): FlashT
 }
 
 /**
- * Prefer manifest.targetFamily from CI; else env-name heuristic; else esp32 for legacy ESP-only bundles.
+ * Derive target family and erase capability from the files in a firmware bundle.
+ *
+ * Rules (in priority order):
+ *   *.factory.bin present           → esp32  (always supports chip erase)
+ *   firmware.dat present            → nrf52 Nordic DFU  (always supports erase)
+ *   *.uf2 present (not nuke.uf2)    → nrf52 or rp2040 (use env name to disambiguate)
+ *
+ * canErase:
+ *   esp32       → always true
+ *   nrf52 DFU   → always true
+ *   nrf52 UF2   → true only when nuke.uf2 is also in the bundle
  */
-export function resolveFlashTargetFamily(
-  manifest: FlashManifest | null,
-  targetEnv: string | null | undefined
-): FlashTargetFamily {
-  const fromManifest = coerceTargetFamily(manifest?.targetFamily)
-  if (fromManifest && fromManifest !== "unknown") {
-    return fromManifest
+export function inferTargetFamilyFromBundle(
+  files: Map<string, Uint8Array>,
+  targetEnv?: string | null
+): { family: FlashTargetFamily; canErase: boolean } {
+  let hasUf2 = false
+  let hasNukeUf2 = false
+
+  for (const path of files.keys()) {
+    const base = path.replace(/^.*\//, "").toLowerCase()
+    if (base.endsWith(".factory.bin")) return { family: "esp32", canErase: true }
+    if (base === "firmware.dat") return { family: "nrf52", canErase: true }
+    if (base === "nuke.uf2") hasNukeUf2 = true
+    else if (base.endsWith(".uf2")) hasUf2 = true
   }
-  const fromEnv = inferTargetFamilyFromEnv(targetEnv ?? null)
-  if (fromEnv) {
-    return fromEnv
+
+  if (hasUf2) {
+    const family = inferTargetFamilyFromEnv(targetEnv) ?? "nrf52"
+    return { family, canErase: hasNukeUf2 }
   }
-  if (fromManifest === "unknown") {
-    return "unknown"
-  }
-  return "esp32"
+
+  // No clear signal — fall back to env name heuristic or default to esp32.
+  const family = inferTargetFamilyFromEnv(targetEnv) ?? "esp32"
+  return { family, canErase: family === "esp32" }
 }

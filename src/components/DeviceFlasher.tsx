@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { buildFlashParts, manifestFromMap, manifestHasFactorySection } from "../lib/espFlashLayout"
+import { buildFlashParts } from "../lib/espFlashLayout"
 import {
   ensureSerialPortClosed,
   ESP_FLASH_WEB_BAUD,
@@ -23,8 +23,8 @@ import {
   type FlashPhase,
 } from "../lib/espFlashRun"
 import { runNrfFlash } from "../lib/nrfFlashRun"
-import { resolveFlashTargetFamily } from "../lib/flashTargetFamily"
-import type { FlashManifest, FlashTargetFamily } from "../lib/untarGz"
+import { inferTargetFamilyFromBundle, inferTargetFamilyFromEnv } from "../lib/flashTargetFamily"
+import type { FlashTargetFamily } from "../lib/untarGz"
 import { extractTarGz } from "../lib/untarGz"
 
 type FlashProgress =
@@ -84,12 +84,14 @@ export default function DeviceFlasher({
   const [busy, setBusy] = useState(false)
   const shareDialogRef = useRef<HTMLDialogElement>(null)
   const [eraseFlashForFactory, setEraseFlashForFactory] = useState(false)
-  const [layoutPreview, setLayoutPreview] = useState<FlashManifest | null>(null)
+  const [bundleFamily, setBundleFamily] = useState<FlashTargetFamily>(
+    inferTargetFamilyFromEnv(targetEnv) ?? "esp32"
+  )
+  const [bundleCanErase, setBundleCanErase] = useState(false)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
   const [bundleLoadError, setBundleLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    setLayoutPreview(null)
     setBundleLoadError(null)
     let cancelled = false
     void (async () => {
@@ -101,10 +103,11 @@ export default function DeviceFlasher({
         }
         const buf = new Uint8Array(await res.arrayBuffer())
         const files = extractTarGz(buf)
-        const m = manifestFromMap(files)
+        const { family, canErase } = inferTargetFamilyFromBundle(files, targetEnv)
         if (!cancelled) {
-          setLayoutPreview(m)
-          setEraseFlashForFactory(prev => (manifestHasFactorySection(m) ? prev : false))
+          setBundleFamily(family)
+          setBundleCanErase(canErase)
+          setEraseFlashForFactory(prev => (canErase ? prev : false))
           setBundleLoadError(null)
         }
       } catch (e) {
@@ -116,25 +119,20 @@ export default function DeviceFlasher({
     return () => {
       cancelled = true
     }
-  }, [bundleUrl])
+  }, [bundleUrl, targetEnv])
 
-  const resolvedFamily = resolveFlashTargetFamily(layoutPreview, targetEnv)
+  const resolvedFamily = bundleFamily
   const flashBlockedReason = unsupportedFlashMessage(resolvedFamily)
   const canEspFlash = flashBlockedReason === null
 
-  const hasFactorySection = useMemo(() => manifestHasFactorySection(layoutPreview), [layoutPreview])
-  // ESP32 can always chip-erase regardless of whether the bundle has a factory section.
-  const canFullReset = resolvedFamily === "esp32" || hasFactorySection
+  // ESP32 can always chip-erase (merged binary supports it); nRF52 only when canErase is set.
+  const canFullReset = resolvedFamily === "esp32" || bundleCanErase
 
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
     if (!res.ok) throw new Error(`Download failed: ${res.status}`)
     const buf = new Uint8Array(await res.arrayBuffer())
-    const files = extractTarGz(buf)
-    const m = manifestFromMap(files)
-    setLayoutPreview(m)
-    setEraseFlashForFactory(prev => (manifestHasFactorySection(m) ? prev : false))
-    return files
+    return extractTarGz(buf)
   }, [bundleUrl])
 
   const flash = useCallback(async () => {
@@ -159,11 +157,9 @@ export default function DeviceFlasher({
       const files = await prepareBundle()
 
       if (resolvedFamily === "nrf52") {
-        const manifest = manifestFromMap(files)
         await runNrfFlash({
           port: port!,
           files,
-          manifest,
           factoryInstall: eraseFlashForFactory,
           onPhase: label => {
             setFlashProgress({ kind: "indeterminate", label })
@@ -173,10 +169,7 @@ export default function DeviceFlasher({
           },
         })
       } else {
-        const plan = buildFlashParts(files, {
-          factoryInstall: eraseFlashForFactory && hasFactorySection,
-          resetDeviceStorage: false,
-        })
+        const plan = buildFlashParts(files)
         if (!plan) {
           toast.error("Could not detect flash layout from bundle")
           return

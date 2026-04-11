@@ -1,5 +1,4 @@
 import { findInTar } from './untarGz'
-import type { FlashManifest } from './untarGz'
 import { buildNordicDfuPlan, runNordicDfu } from './nrfDfuRun'
 
 export type NrfFlashPlan = {
@@ -30,59 +29,32 @@ function pickDirectory(): Promise<FileSystemDirectoryHandle> {
 }
 
 /**
- * Build an nRF52 UF2 flash plan from the bundle tarball + parsed manifest.
- * Reads the `update` section for a normal flash, or `factory` when factoryInstall is true.
- * Images with role "uf2" are the firmware; role "nuke" is the erase-all UF2.
- *
- * Falls back to scanning the bundle directly for *.uf2 when no manifest is present
- * (covers pre-manifest bundles and builds where emit-flash-manifest.py did not run).
+ * Build an nRF52 UF2 flash plan from the bundle files.
+ * Scans for *.uf2 (preferring names starting with "firmware", excluding nuke.uf2).
+ * When factoryInstall is true, also includes nuke.uf2 if present in the bundle.
  */
 export function buildNrfPlan(
   files: Map<string, Uint8Array>,
-  manifest: FlashManifest | null,
   factoryInstall: boolean
 ): NrfFlashPlan | null {
-  const section = factoryInstall ? (manifest?.factory ?? manifest?.update) : manifest?.update
+  let firmwareFile: Uint8Array | undefined
+  let firmwareName: string | undefined
 
-  if (section?.images?.length) {
-    let firmwareFile: Uint8Array | undefined
-    let firmwareName: string | undefined
-    let nukeFile: Uint8Array | undefined
-
-    for (const img of section.images) {
-      const role = img.role?.toLowerCase()
-      if (role === 'nuke') {
-        nukeFile = findInTar(files, img.file)
-      } else if (role === 'uf2' || img.file.toLowerCase().endsWith('.uf2')) {
-        if (!firmwareFile) {
-          firmwareFile = findInTar(files, img.file)
-          firmwareName = img.file
-        }
-      }
-    }
-
-    if (firmwareFile && firmwareName) {
-      return { firmwareFile, firmwareName, nukeFile }
-    }
-  }
-
-  // Fallback: scan bundle files directly for *.uf2 (no manifest or manifest had no UF2 images).
-  // Prefer names starting with "firmware", exclude nuke.uf2.
-  let fallbackName: string | undefined
-  let fallbackData: Uint8Array | undefined
   for (const [path, data] of files) {
     const base = path.replace(/^.*\//, '')
     const baseLower = base.toLowerCase()
     if (!baseLower.endsWith('.uf2') || baseLower === 'nuke.uf2') continue
-    if (!fallbackName || baseLower.startsWith('firmware')) {
-      fallbackName = base
-      fallbackData = data
+    if (!firmwareName || baseLower.startsWith('firmware')) {
+      firmwareName = base
+      firmwareFile = data
       if (baseLower.startsWith('firmware')) break
     }
   }
 
-  if (!fallbackData || !fallbackName) return null
-  return { firmwareFile: fallbackData, firmwareName: fallbackName }
+  if (!firmwareFile || !firmwareName) return null
+
+  const nukeFile = factoryInstall ? findInTar(files, 'nuke.uf2') : undefined
+  return { firmwareFile, firmwareName, nukeFile }
 }
 
 /**
@@ -153,7 +125,7 @@ async function runUf2Flash(options: {
 
 /**
  * Flash an nRF52 device. Routes to Nordic Serial DFU (seamless, progress bar) when the bundle
- * contains a Nordic DFU manifest (firmware.bin + firmware.dat), otherwise falls back to UF2
+ * contains a Nordic DFU package (firmware.bin + firmware.dat), otherwise falls back to UF2
  * via the File System Access API drive picker.
  *
  * The port must have already received the 1200-baud CDC bootloader pulse and be closed.
@@ -161,12 +133,11 @@ async function runUf2Flash(options: {
 export async function runNrfFlash(options: {
   port: SerialPort
   files: Map<string, Uint8Array>
-  manifest: FlashManifest | null
   factoryInstall: boolean
   onPhase: (label: string) => void
   onWriteProgress: (p: NrfWriteProgressPayload) => void
 }): Promise<void> {
-  const { port, files, manifest, factoryInstall, onPhase, onWriteProgress } = options
+  const { port, files, factoryInstall, onPhase, onWriteProgress } = options
 
   // Prefer Nordic Serial DFU when the bundle contains a Nordic DFU package (bin + dat).
   const dfuPlan = buildNordicDfuPlan(files)
@@ -182,7 +153,7 @@ export async function runNrfFlash(options: {
   }
 
   // Fall back to UF2 drive picker (Meshtastic nRF52 and other UF2 bootloader boards).
-  const uf2Plan = buildNrfPlan(files, manifest, factoryInstall)
+  const uf2Plan = buildNrfPlan(files, factoryInstall)
   if (!uf2Plan) {
     throw new Error('No flashable firmware found in bundle (expected Nordic DFU .bin/.dat or a .uf2 file)')
   }

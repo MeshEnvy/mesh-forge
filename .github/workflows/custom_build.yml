@@ -165,6 +165,21 @@ jobs:
             exit 1
           fi
 
+      - name: Generate merged factory binary for ESP32 targets (if applicable)
+        shell: bash
+        run: |
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
+          if [ -f "$BUILD_DIR/bootloader.bin" ]; then
+            echo "ESP32 target detected; running mergebin → firmware-merged.factory.bin"
+            cd "$ROOT"
+            export MERGED_BIN_PATH="$BUILD_DIR/firmware-merged.factory.bin"
+            pio run -t mergebin -e "${{ inputs.target_env }}" 2>&1 || \
+              echo "WARNING: mergebin target failed; factory binary will not be available"
+          else
+            echo "No bootloader.bin found; skipping mergebin (non-ESP32 target)"
+          fi
+
       - name: Download Meshtastic ESP OTA companion (if applicable)
         shell: bash
         run: |
@@ -173,6 +188,21 @@ jobs:
           cd "$ROOT"
           BUILD_DIR=".pio/build/${{ inputs.target_env }}"
           bash "${{ github.workspace }}/scripts/download-meshtastic-ota.sh" "$ROOT/$BUILD_DIR"
+
+      - name: Extend merged binary with Meshtastic OTA companion (if applicable)
+        shell: bash
+        run: |
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
+          MERGED="$BUILD_DIR/firmware-merged.factory.bin"
+          PARTS="$BUILD_DIR/partitions.bin"
+          OTA_BIN=$(ls "$BUILD_DIR"/mt-*.ota.bin "$BUILD_DIR"/bleota-c3.bin 2>/dev/null | head -1)
+          if [ -f "$MERGED" ] && [ -f "$PARTS" ] && [ -n "$OTA_BIN" ]; then
+            python3 "${{ github.workspace }}/scripts/extend-merged-with-ota.py" \
+              "$MERGED" "$PARTS" "$OTA_BIN"
+          else
+            echo "Skipping OTA extension (merged=$( [ -f "$MERGED" ] && echo yes || echo no), ota=$( [ -n "$OTA_BIN" ] && echo yes || echo no))"
+          fi
 
       - name: Stage or generate nRF52 DFU files (if applicable)
         shell: bash
@@ -227,7 +257,6 @@ jobs:
           ROOT=$(cat /tmp/fw-src-root.txt)
           cd "$ROOT"
           BUILD_DIR=".pio/build/${{ inputs.target_env }}"
-          python3 "${{ github.workspace }}/scripts/emit-flash-manifest.py" "$ROOT/$BUILD_DIR" "$ROOT" "${{ inputs.target_env }}"
           ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
           STAGE=/tmp/fw-bundle
           rm -rf "$STAGE"
@@ -237,9 +266,6 @@ jobs:
             cp -a "$f" "$STAGE/"
           done
           shopt -u nullglob
-          if [ -f "$BUILD_DIR/flash-manifest.json" ]; then
-            cp -a "$BUILD_DIR/flash-manifest.json" "$STAGE/"
-          fi
           # Nordic DFU manifest (MeshCore and other nRF52 builds)
           if [ -f "$BUILD_DIR/manifest.json" ]; then
             cp -a "$BUILD_DIR/manifest.json" "$STAGE/"
