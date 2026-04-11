@@ -8,7 +8,7 @@ targetFamily from PlatformIO when missing.
 Otherwise, if Meshtastic-style *.mt.json is present, synthesize a manifest
 from partition table + on-disk split artifacts (no *.factory.bin — USB bundles
 omit the merged image). Only LittleFS rows use optional:true (Mesh Forge:
-Reset device storage).
+Reset device storage). OTA slots accept mt-*-ota.bin (ESP32/S3) or bleota-c3.bin (C3/C6).
 
 Optional args: PROJECT_ROOT TARGET_ENV — merged PIO config for that env fills
 targetFamily (and platform/board) for the USB flasher UI.
@@ -229,6 +229,12 @@ def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
             off = ota1_offset(parts)
             if off is not None:
                 add(n, off, optional=False)
+
+    # ESP32-C3/C6 Meshtastic workflow uses bleota-c3.bin at ota_1 (see build_firmware.yml).
+    if "bleota-c3.bin" in names:
+        off = ota1_offset(parts)
+        if off is not None:
+            add("bleota-c3.bin", off, optional=False)
 
     if not images:
         return None

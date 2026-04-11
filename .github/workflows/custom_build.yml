@@ -165,6 +165,15 @@ jobs:
             exit 1
           fi
 
+      - name: Download Meshtastic ESP OTA companion (if applicable)
+        shell: bash
+        run: |
+          set -e
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          cd "$ROOT"
+          BUILD_DIR=".pio/build/${{ inputs.target_env }}"
+          bash "${{ github.workspace }}/scripts/download-meshtastic-ota.sh" "$ROOT/$BUILD_DIR"
+
       - name: Package and upload firmware bundle
         id: pio
         env:
