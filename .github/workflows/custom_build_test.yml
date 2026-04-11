@@ -174,6 +174,35 @@ jobs:
           BUILD_DIR=".pio/build/${{ inputs.target_env }}"
           bash "${{ github.workspace }}/scripts/download-meshtastic-ota.sh" "$ROOT/$BUILD_DIR"
 
+      - name: Generate nRF52 DFU init packet (if applicable)
+        shell: bash
+        run: |
+          set -e
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
+          # Only runs for nRF52 builds — detected by .uf2 output from PlatformIO
+          if ! ls "$BUILD_DIR"/*.uf2 >/dev/null 2>&1; then
+            echo "No .uf2 output; skipping nRF52 DFU init packet generation"
+            exit 0
+          fi
+          FW_BIN="$BUILD_DIR/firmware.bin"
+          if [ ! -f "$FW_BIN" ]; then
+            echo "firmware.bin not found in build dir; skipping DFU init packet"
+            exit 0
+          fi
+          echo "nRF52 build: generating DFU init packet from firmware.bin"
+          pip install -q adafruit-nrfutil
+          adafruit-nrfutil dfu genpkg \
+            --dev-type 0xFFFF \
+            --dev-revision 0xFFFF \
+            --application-version 0xFFFFFFFF \
+            --sd-req 0xFFFE \
+            --application "$FW_BIN" \
+            /tmp/nrf52-dfu.zip
+          # Extract only the .dat init packet; firmware.bin is already in the build dir
+          unzip -j /tmp/nrf52-dfu.zip "*.dat" -d "$BUILD_DIR/"
+          echo "DFU init packet written: $(ls "$BUILD_DIR"/*.dat 2>/dev/null || echo '(none)')"
+
       - name: Package and upload firmware bundle
         id: pio
         env:
@@ -193,7 +222,7 @@ jobs:
           rm -rf "$STAGE"
           mkdir -p "$STAGE"
           shopt -s nullglob
-          for f in "$BUILD_DIR"/*.bin "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex; do
+          for f in "$BUILD_DIR"/*.bin "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex "$BUILD_DIR"/*.dat; do
             cp -a "$f" "$STAGE/"
           done
           shopt -u nullglob
