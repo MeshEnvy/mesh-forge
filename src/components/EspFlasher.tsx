@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { buildFlashParts, manifestFromMap } from "../lib/espFlashLayout"
+import { buildFlashParts, manifestFromMap, manifestHasFactorySection } from "../lib/espFlashLayout"
 import {
   ensureSerialPortClosed,
   ESP_FLASH_WEB_BAUD,
@@ -85,7 +85,7 @@ export default function EspFlasher({
 }: EspFlasherProps) {
   const [busy, setBusy] = useState(false)
   const shareDialogRef = useRef<HTMLDialogElement>(null)
-  const [resetDeviceStorage, setResetDeviceStorage] = useState(false)
+  const [eraseFlashForFactory, setEraseFlashForFactory] = useState(false)
   const [layoutPreview, setLayoutPreview] = useState<FlashManifest | null>(null)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
   const [bundleLoadError, setBundleLoadError] = useState<string | null>(null)
@@ -106,6 +106,7 @@ export default function EspFlasher({
         const m = manifestFromMap(files)
         if (!cancelled) {
           setLayoutPreview(m)
+          setEraseFlashForFactory(prev => (manifestHasFactorySection(m) ? prev : false))
           setBundleLoadError(null)
         }
       } catch (e) {
@@ -123,6 +124,8 @@ export default function EspFlasher({
   const flashBlockedReason = unsupportedFlashMessage(resolvedFamily)
   const canEspFlash = flashBlockedReason === null
 
+  const hasFactorySection = useMemo(() => manifestHasFactorySection(layoutPreview), [layoutPreview])
+
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
     if (!res.ok) throw new Error(`Download failed: ${res.status}`)
@@ -130,6 +133,7 @@ export default function EspFlasher({
     const files = extractTarGz(buf)
     const m = manifestFromMap(files)
     setLayoutPreview(m)
+    setEraseFlashForFactory(prev => (manifestHasFactorySection(m) ? prev : false))
     return files
   }, [bundleUrl])
 
@@ -153,17 +157,20 @@ export default function EspFlasher({
 
       setFlashProgress({ kind: "indeterminate", label: "Downloading firmware…" })
       const files = await prepareBundle()
-      const parts = buildFlashParts(files, { resetDeviceStorage })
-      if (!parts) {
+      const plan = buildFlashParts(files, {
+        factoryInstall: eraseFlashForFactory,
+        resetDeviceStorage: false,
+      })
+      if (!plan) {
         toast.error("Could not detect flash layout from bundle")
         return
       }
 
       await runEspFlash({
         port,
-        parts,
+        parts: plan.parts,
         baud: ESP_FLASH_WEB_BAUD,
-        eraseAll: false,
+        eraseAll: plan.eraseAll,
         onPhase: phase => {
           setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
         },
@@ -193,7 +200,7 @@ export default function EspFlasher({
         setFlashProgress(null)
       }
     }
-  }, [resetDeviceStorage, prepareBundle, canEspFlash, flashBlockedReason])
+  }, [eraseFlashForFactory, prepareBundle, canEspFlash, flashBlockedReason])
 
   const shareUrlTrimmed = useMemo(() => sharePageUrl?.trim() ?? "", [sharePageUrl])
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
@@ -264,31 +271,39 @@ export default function EspFlasher({
           <button
             type="button"
             role="switch"
-            aria-checked={resetDeviceStorage}
-            aria-label="Reset device storage"
-            disabled={!canEspFlash}
-            onClick={() => setResetDeviceStorage(v => !v)}
+            aria-checked={eraseFlashForFactory}
+            aria-label="Full device reset (erase and reinstall from scratch)"
+            disabled={!canEspFlash || busy || !hasFactorySection}
+            onClick={() => setEraseFlashForFactory(v => !v)}
             className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border border-slate-600 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-              resetDeviceStorage ? "bg-amber-600" : "bg-slate-700"
+              eraseFlashForFactory ? "bg-amber-600" : "bg-slate-700"
             }`}
           >
             <span
               className={`pointer-events-none inline-block h-6 w-6 translate-y-0.5 rounded-full bg-white shadow transition-transform duration-200 ease-out ${
-                resetDeviceStorage ? "translate-x-[22px]" : "translate-x-0.5"
+                eraseFlashForFactory ? "translate-x-[22px]" : "translate-x-0.5"
               }`}
             />
           </button>
-          <span className="text-sm font-medium text-slate-200">Reset device storage</span>
+          <span className="text-sm font-medium text-slate-200">Full device reset</span>
         </div>
       </div>
 
-      {resetDeviceStorage ? (
+      {!hasFactorySection ? (
+        <p className="text-xs text-amber-300/90">
+          Full device reset is not available for this bundle—only an update. Typical reasons: an older download, a
+          build that did not include a factory image, or firmware not produced by this app’s usual ESP32 flow.
+        </p>
+      ) : null}
+
+      {eraseFlashForFactory ? (
         <p
-          className="text-sm text-red-400 border border-red-500/40 bg-red-950/35 rounded-md px-3 py-2"
+          className="text-sm text-amber-200/90 rounded-md border border-amber-800/40 bg-amber-950/25 px-3 py-2"
           role="status"
         >
-          <strong className="font-semibold text-red-300">Warning:</strong> all user data on the device will be deleted
-          when you flash (channels, preferences, and stored files).
+          <strong className="font-semibold text-amber-100">You will lose everything on the radio:</strong> channels and
+          settings, private keys, node info, message history, and any stored maps or telemetry. Only use this if you are
+          deliberately starting over or recovering a bad state.
         </p>
       ) : null}
 

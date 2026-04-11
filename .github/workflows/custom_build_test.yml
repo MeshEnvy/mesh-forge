@@ -194,7 +194,6 @@ jobs:
           mkdir -p "$STAGE"
           shopt -s nullglob
           for f in "$BUILD_DIR"/*.bin "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex; do
-            case "$f" in *.factory.bin) continue ;; esac
             cp -a "$f" "$STAGE/"
           done
           shopt -u nullglob

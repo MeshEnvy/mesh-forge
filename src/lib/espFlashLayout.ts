@@ -1,16 +1,26 @@
-import { findInTar, parseFlashManifest, type FlashManifest, type FlashManifestImage } from './untarGz'
+import {
+  findInTar,
+  parseFlashManifest,
+  type FlashManifest,
+  type FlashManifestSection,
+} from './untarGz'
 
 export type FlashPart = { data: Uint8Array; address: number; name: string }
 
-function manifestImageOffset(im: FlashManifestImage): number | null {
-  const addr = typeof im.offset === 'string' ? parseInt(im.offset, 0) : Number(im.offset)
-  return Number.isFinite(addr) ? addr : null
+export type BuildFlashPlan = {
+  parts: FlashPart[]
+  eraseAll: boolean
 }
 
 export type BuildFlashPartsOptions = {
   /**
-   * When true, flash optional LittleFS images from the manifest (wipes Meshtastic storage on device).
-   * Bootloader, partitions, firmware, and other non-LittleFS images are always included when present.
+   * When true, use manifest `factory` section (chip erase + merged factory + OTA + filesystem).
+   * When false, use `update` section or legacy flat `images`.
+   */
+  factoryInstall?: boolean
+  /**
+   * Legacy: when an image has optional:true (e.g. LittleFS), skip unless true.
+   * Ignored for Meshtastic dual manifests (update has no optional rows).
    */
   resetDeviceStorage?: boolean
 }
@@ -27,6 +37,20 @@ function tarBasename(path: string): string {
 function isLittlefsManifestFile(file: string): boolean {
   const base = tarBasename(file)
   return base.toLowerCase().startsWith('littlefs-') && base.toLowerCase().endsWith('.bin')
+}
+
+function activeSection(m: FlashManifest, factoryInstall: boolean): FlashManifestSection | null {
+  if (factoryInstall) {
+    const f = m.factory
+    if (f && Array.isArray(f.images) && f.images.length > 0) return f
+    return null
+  }
+  const u = m.update
+  if (u && Array.isArray(u.images) && u.images.length > 0) return u
+  if (Array.isArray(m.images) && m.images.length > 0) {
+    return { images: m.images, eraseFlash: m.eraseFlash }
+  }
+  return null
 }
 
 /**
@@ -60,20 +84,23 @@ function resolveVersionedFirmwareApp(
   return undefined
 }
 
-/** Build ordered flash parts from a flat map (tar paths or bare filenames → bytes). */
+/** Build ordered flash parts + erase policy from a flat map (tar paths or bare filenames → bytes). */
 export function buildFlashParts(
   files: Map<string, Uint8Array>,
   options: BuildFlashPartsOptions = {}
-): FlashPart[] | null {
+): BuildFlashPlan | null {
   const resetDeviceStorage = options.resetDeviceStorage ?? false
+  const factoryInstall = options.factoryInstall ?? false
 
   const manifestRaw = findInTar(files, 'flash-manifest.json')
   if (manifestRaw) {
     const text = new TextDecoder().decode(manifestRaw)
     const m = parseFlashManifest(text)
     if (m) {
+      const section = activeSection(m, factoryInstall)
+      if (!section) return null
       const out: FlashPart[] = []
-      for (const img of m.images) {
+      for (const img of section.images) {
         if (img.optional === true && isLittlefsManifestFile(img.file) && !resetDeviceStorage) continue
         const data = findInTar(files, img.file)
         if (!data) return null
@@ -81,7 +108,12 @@ export function buildFlashParts(
         if (!Number.isFinite(addr)) return null
         out.push({ data, address: addr, name: img.file })
       }
-      if (out.length) return sortFlashParts(out)
+      if (out.length) {
+        return {
+          parts: sortFlashParts(out),
+          eraseAll: Boolean(section.eraseFlash),
+        }
+      }
     }
   }
 
@@ -108,18 +140,26 @@ export function buildFlashParts(
       { data: app, address: 0x10000, name: appName },
     ]
     if (bootApp0) arr.push({ data: bootApp0, address: 0xe000, name: 'boot_app0.bin' })
-    return sortFlashParts(arr)
+    return { parts: sortFlashParts(arr), eraseAll: false }
   }
 
   if (app && appName && !bootloader && !partitions) {
-    return [{ data: app, address: 0x0, name: appName }]
+    return { parts: [{ data: app, address: 0x0, name: appName }], eraseAll: false }
   }
 
   return null
 }
 
-export function manifestFromMap(files: Map<string, Uint8Array>): FlashManifest | null {
-  const raw = findInTar(files, 'flash-manifest.json')
+export function manifestFromMap(
+  files: Map<string, Uint8Array>,
+  manifestFile = 'flash-manifest.json'
+): FlashManifest | null {
+  const raw = findInTar(files, manifestFile)
   if (!raw) return null
   return parseFlashManifest(new TextDecoder().decode(raw))
+}
+
+/** True if manifest includes a factory (erase + merged image) section with images. */
+export function manifestHasFactorySection(m: FlashManifest | null): boolean {
+  return Boolean(m?.factory?.images && m.factory.images.length > 0)
 }

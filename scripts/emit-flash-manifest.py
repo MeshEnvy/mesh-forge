@@ -5,10 +5,12 @@ Emit flash-manifest.json for Mesh Forge USB flasher.
 If BUILD_DIR/flash-manifest.json already exists (project-supplied), merge in
 targetFamily from PlatformIO when missing.
 
-Otherwise, if Meshtastic-style *.mt.json is present, synthesize a manifest
-from partition table + on-disk split artifacts (no *.factory.bin — USB bundles
-omit the merged image). Only LittleFS rows use optional:true (Mesh Forge:
-Reset device storage). OTA slots accept mt-*-ota.bin (ESP32/S3) or bleota-c3.bin (C3/C6).
+Otherwise, if Meshtastic-style *.mt.json is present, synthesize one JSON with:
+  - "update": app @ ota_0 + BLE OTA @ ota_1, eraseFlash false (Meshtastic “Update”).
+  - "factory": merged *.factory.bin @ 0 + OTA + LittleFS, eraseFlash true (Meshtastic “Erase device”),
+    omitted if no factory.bin in BUILD_DIR.
+
+OTA: mt-*-ota.bin (ESP32/S3) or bleota-c3.bin (C3/C6).
 
 Optional args: PROJECT_ROOT TARGET_ENV — merged PIO config for that env fills
 targetFamily (and platform/board) for the USB flasher UI.
@@ -183,11 +185,33 @@ def _dedupe_same_offset(images: list[dict]) -> list[dict]:
     return out
 
 
-def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
+def _is_non_factory_firmware(name: str) -> bool:
+    return bool(re.match(r"^firmware-.+\.bin$", name, re.I) and not re.search(r"\.factory\.bin$", name, re.I))
+
+
+def pick_factory_bin(names: set[str]) -> str | None:
+    cands = sorted(n for n in names if re.match(r"^firmware-.+\.factory\.bin$", n, re.I))
+    return cands[0] if cands else None
+
+
+def pick_non_factory_firmware(names: set[str], mt: dict) -> str | None:
+    for entry in mt.get("files") or []:
+        fname = entry.get("name")
+        if not fname or fname not in names or entry.get("part_name") != "app0":
+            continue
+        if _is_non_factory_firmware(fname):
+            return fname
+    for n in sorted(names):
+        if _is_non_factory_firmware(n):
+            return n
+    return None
+
+
+def emit_meshtastic_update(build_dir: str, mt: dict) -> dict | None:
+    """Official-style update: app @ ota_0 + OTA @ ota_1 only (no erase, no factory, no FS)."""
     parts: list[dict] = mt.get("part") or []
     if not parts:
         return None
-
     names = list_basenames(build_dir)
     images: list[dict] = []
     seen: set[str] = set()
@@ -201,51 +225,93 @@ def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
         images.append(row)
         seen.add(file)
 
-    add("bootloader.bin", 0x1000)
-    add("partitions.bin", 0x8000)
-    add("boot_app0.bin", 0xE000)
+    app_bin = pick_non_factory_firmware(names, mt)
+    if not app_bin:
+        return None
+    off0 = part_offset_for_slot(parts, "app0")
+    if off0 is None:
+        return None
+    add(app_bin, off0, optional=False)
+
+    ota_added = False
+    for n in sorted(names):
+        if re.match(r"^mt-.+-ota\.bin$", n, re.I):
+            o = ota1_offset(parts)
+            if o is not None:
+                add(n, o, optional=False)
+                ota_added = True
+            break
+    if not ota_added and "bleota-c3.bin" in names:
+        o = ota1_offset(parts)
+        if o is not None:
+            add("bleota-c3.bin", o, optional=False)
+
+    images = _dedupe_same_offset(images)
+    images.sort(key=_offset_int)
+    return {"images": images, "eraseFlash": False}
+
+
+def emit_meshtastic_full(build_dir: str, mt: dict, factory_bin: str) -> dict | None:
+    """Official-style erase + factory: merged factory @ 0 + OTA + LittleFS."""
+    parts: list[dict] = mt.get("part") or []
+    if not parts:
+        return None
+    names = list_basenames(build_dir)
+    if factory_bin not in names:
+        return None
+
+    images: list[dict] = []
+    seen: set[str] = set()
+
+    def add(file: str, offset: int, optional: bool = False) -> None:
+        if file not in names or file in seen:
+            return
+        row: dict = {"file": file, "offset": offset}
+        if optional:
+            row["optional"] = True
+        images.append(row)
+        seen.add(file)
+
+    add(factory_bin, 0, optional=False)
+
+    ota_added = False
+    for n in sorted(names):
+        if re.match(r"^mt-.+-ota\.bin$", n, re.I):
+            o = ota1_offset(parts)
+            if o is not None:
+                add(n, o, optional=False)
+                ota_added = True
+            break
+    if not ota_added and "bleota-c3.bin" in names:
+        o = ota1_offset(parts)
+        if o is not None:
+            add("bleota-c3.bin", o, optional=False)
+
+    for n in sorted(names):
+        if n.startswith("littlefs-") and n.endswith(".bin"):
+            so = spiffs_offset(parts)
+            if so is not None:
+                add(n, so, optional=False)
 
     for entry in mt.get("files") or []:
         fname = entry.get("name")
         part_name = entry.get("part_name")
-        if not fname or not part_name or fname not in names:
+        if not fname or part_name != "spiffs" or fname not in names:
             continue
-        off = part_offset_for_slot(parts, str(part_name))
-        if off is None:
+        if not str(fname).lower().startswith("littlefs-"):
             continue
-        # Only LittleFS is optional in the bundle; Mesh Forge flashes it when the user enables
-        # "Reset device storage". Bootloader, partitions, app, and BLE OTA are always flashed when present.
-        opt = bool(fname.startswith("littlefs-"))
-        add(fname, off, optional=opt)
-
-    for n in sorted(names):
-        if n.startswith("littlefs-") and n.endswith(".bin"):
-            off = spiffs_offset(parts)
-            if off is not None:
-                add(n, off, optional=True)
-
-    for n in sorted(names):
-        if re.match(r"^mt-.+-ota\.bin$", n, re.I):
-            off = ota1_offset(parts)
-            if off is not None:
-                add(n, off, optional=False)
-
-    # ESP32-C3/C6 Meshtastic workflow uses bleota-c3.bin at ota_1 (see build_firmware.yml).
-    if "bleota-c3.bin" in names:
-        off = ota1_offset(parts)
-        if off is not None:
-            add("bleota-c3.bin", off, optional=False)
-
-    if not images:
-        return None
+        so = spiffs_offset(parts)
+        if so is not None:
+            add(fname, so, optional=False)
 
     images = _dedupe_same_offset(images)
+    images.sort(key=_offset_int)
 
-    if not any(re.match(r"^firmware-.+\.bin$", im["file"], re.I) for im in images):
+    o1 = ota1_offset(parts)
+    if o1 is not None and not any(_offset_int(im) == o1 for im in images):
         return None
 
-    images.sort(key=_offset_int)
-    return {"images": images}
+    return {"images": images, "eraseFlash": True}
 
 
 def pick_mt_json(build_dir: str) -> str | None:
@@ -283,8 +349,14 @@ def main() -> int:
     if os.path.isfile(out_path):
         with open(out_path, encoding="utf-8") as f:
             manifest = json.load(f)
-        if not isinstance(manifest, dict) or not isinstance(manifest.get("images"), list):
+        if not isinstance(manifest, dict):
             print(f"Invalid existing {out_path}", file=sys.stderr)
+            return 1
+        ok_legacy = isinstance(manifest.get("images"), list)
+        up = manifest.get("update")
+        ok_dual = isinstance(up, dict) and isinstance(up.get("images"), list)
+        if not ok_legacy and not ok_dual:
+            print(f"Invalid existing {out_path} (need images[] or update.images[])", file=sys.stderr)
             return 1
         merged = _merge_target_family_meta(manifest, pio_family, pio_platform, pio_board)
         if merged != manifest:
@@ -302,14 +374,27 @@ def main() -> int:
     with open(mt_path, encoding="utf-8") as f:
         mt = json.load(f)
 
-    manifest = emit_from_mt(build_dir, mt)
-    if not manifest:
-        print("Could not synthesize flash-manifest.json from mt.json")
+    names = list_basenames(build_dir)
+    manifest_update = emit_meshtastic_update(build_dir, mt)
+    if not manifest_update:
+        print("Could not synthesize flash-manifest.json (update) from mt.json")
         return 0
 
-    manifest = _merge_target_family_meta(manifest, pio_family, pio_platform, pio_board)
-    _write_manifest(out_path, manifest)
-    print(f"Wrote {out_path}")
+    doc: dict = {"update": manifest_update}
+    factory = pick_factory_bin(names)
+    if factory:
+        manifest_full = emit_meshtastic_full(build_dir, mt, factory)
+        if manifest_full:
+            doc["factory"] = manifest_full
+        else:
+            print("Could not build factory section; omitting factory key", file=sys.stderr)
+    else:
+        print("No firmware-*.factory.bin in BUILD_DIR; omitting factory section")
+
+    merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
+    _write_manifest(out_path, merged_doc)
+    print(f"Wrote {out_path} (update + {'factory' if 'factory' in merged_doc else 'no factory'})")
+
     return 0
 
 
