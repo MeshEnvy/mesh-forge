@@ -372,13 +372,29 @@ def emit_generic_nrf52(names: set[str]) -> dict | None:
 # Path 4 — generic ESP32 (standard PlatformIO bins, no *.mt.json)
 # ---------------------------------------------------------------------------
 
-# Standard PlatformIO ESP32 flash offsets
-_ESP32_OFFSETS: dict[str, int] = {
+# Chips where the secondary bootloader lives at 0x0 (not 0x1000).
+# ESP32 and ESP32-S2 use 0x1000; S3, C3, C6, H2 use 0x0.
+_ESP32_BOOTLOADER_OFFSET_ZERO_BOARDS = re.compile(
+    r"esp32[-_]?(s3|c3|c6|h2|c2|p4)",
+    re.I,
+)
+
+_ESP32_OFFSETS_1000: dict[str, int] = {
     "bootloader.bin": 0x1000,
     "partitions.bin": 0x8000,
     "boot_app0.bin": 0xE000,
 }
+_ESP32_OFFSETS_0000: dict[str, int] = {
+    "bootloader.bin": 0x0,
+    "partitions.bin": 0x8000,
+    "boot_app0.bin": 0xE000,
+}
 _ESP32_APP_OFFSET = 0x10000
+
+
+def _esp32_bootloader_at_zero(board: str | None) -> bool:
+    """Return True when the chip variant places its bootloader at 0x0 (S3, C3, C6, H2…)."""
+    return bool(_ESP32_BOOTLOADER_OFFSET_ZERO_BOARDS.search(board or ""))
 
 
 def _pick_esp32_app_bin(names: set[str]) -> str | None:
@@ -392,11 +408,15 @@ def _pick_esp32_app_bin(names: set[str]) -> str | None:
     return cands[0] if cands else None
 
 
-def emit_generic_esp32(names: set[str]) -> dict | None:
+def emit_generic_esp32(names: set[str], board: str | None = None) -> dict | None:
     """
     Emit a standard ESP32 manifest from PlatformIO bin output.
     update: bootloader + partitions + app (+ boot_app0 if present)
     factory (optional): firmware-*.factory.bin @ 0x0, eraseFlash true
+
+    The bootloader offset varies by chip:
+      ESP32 / ESP32-S2  → 0x1000
+      ESP32-S3 / C3 / C6 / H2 → 0x0
     """
     bootloader = "bootloader.bin" if "bootloader.bin" in names else None
     partitions = "partitions.bin" if "partitions.bin" in names else None
@@ -406,12 +426,14 @@ def emit_generic_esp32(names: set[str]) -> dict | None:
         # Not enough for a canonical ESP32 layout
         return None
 
+    offsets = _ESP32_OFFSETS_0000 if _esp32_bootloader_at_zero(board) else _ESP32_OFFSETS_1000
+
     update_images: list[dict] = [
-        {"file": "bootloader.bin", "offset": _ESP32_OFFSETS["bootloader.bin"]},
-        {"file": "partitions.bin", "offset": _ESP32_OFFSETS["partitions.bin"]},
+        {"file": "bootloader.bin", "offset": offsets["bootloader.bin"]},
+        {"file": "partitions.bin", "offset": offsets["partitions.bin"]},
     ]
     if "boot_app0.bin" in names:
-        update_images.append({"file": "boot_app0.bin", "offset": _ESP32_OFFSETS["boot_app0.bin"]})
+        update_images.append({"file": "boot_app0.bin", "offset": offsets["boot_app0.bin"]})
     update_images.append({"file": app_bin, "offset": _ESP32_APP_OFFSET})
     update_images.sort(key=lambda im: im["offset"])
 
@@ -538,7 +560,7 @@ def main() -> int:
 
     # Path 4: generic ESP32 (standard PlatformIO bin output)
     if pio_family == "esp32":
-        doc = emit_generic_esp32(names)
+        doc = emit_generic_esp32(names, board=pio_board)
         if doc:
             merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
             _write_manifest(out_path, merged_doc)
