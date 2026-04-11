@@ -1,5 +1,6 @@
 import { findInTar } from './untarGz'
 import type { FlashManifest } from './untarGz'
+import { buildNordicDfuPlan, runNordicDfu } from './nrfDfuRun'
 
 export type NrfFlashPlan = {
   /** Written first when chip erase is requested; causes device to erase all flash and reboot. */
@@ -29,7 +30,7 @@ function pickDirectory(): Promise<FileSystemDirectoryHandle> {
 }
 
 /**
- * Build an nRF52 flash plan from the bundle tarball + parsed manifest.
+ * Build an nRF52 UF2 flash plan from the bundle tarball + parsed manifest.
  * Reads the `update` section for a normal flash, or `factory` when factoryInstall is true.
  * Images with role "uf2" are the firmware; role "nuke" is the erase-all UF2.
  *
@@ -112,7 +113,7 @@ async function writeToDir(dirHandle: FileSystemDirectoryHandle, filename: string
  *   3. showDirectoryPicker again — user selects the re-enumerated UF2 drive
  *   4. Write firmware.uf2 → device reboots
  */
-export async function runNrfFlash(options: {
+async function runUf2Flash(options: {
   plan: NrfFlashPlan
   onPhase: (label: string) => void
   onWriteProgress: (p: NrfWriteProgressPayload) => void
@@ -150,8 +151,47 @@ export async function runNrfFlash(options: {
   }
 }
 
-/** True when the File System Access API directory picker is available (Chromium). */
+/**
+ * Flash an nRF52 device. Routes to Nordic Serial DFU (seamless, progress bar) when the bundle
+ * contains a Nordic DFU manifest (firmware.bin + firmware.dat), otherwise falls back to UF2
+ * via the File System Access API drive picker.
+ *
+ * The port must have already received the 1200-baud CDC bootloader pulse and be closed.
+ */
+export async function runNrfFlash(options: {
+  port: SerialPort
+  files: Map<string, Uint8Array>
+  manifest: FlashManifest | null
+  factoryInstall: boolean
+  onPhase: (label: string) => void
+  onWriteProgress: (p: NrfWriteProgressPayload) => void
+}): Promise<void> {
+  const { port, files, manifest, factoryInstall, onPhase, onWriteProgress } = options
+
+  // Prefer Nordic Serial DFU when the bundle contains a Nordic DFU package (bin + dat).
+  const dfuPlan = buildNordicDfuPlan(files)
+  if (dfuPlan) {
+    await runNordicDfu({
+      port,
+      plan: dfuPlan,
+      eraseAll: factoryInstall,
+      onPhase,
+      onProgress: pct => onWriteProgress({ phase: 'firmware', written: pct, total: 100, pct }),
+    })
+    return
+  }
+
+  // Fall back to UF2 drive picker (Meshtastic nRF52 and other UF2 bootloader boards).
+  const uf2Plan = buildNrfPlan(files, manifest, factoryInstall)
+  if (!uf2Plan) {
+    throw new Error('No flashable firmware found in bundle (expected Nordic DFU .bin/.dat or a .uf2 file)')
+  }
+  await runUf2Flash({ plan: uf2Plan, onPhase, onWriteProgress })
+}
+
+/** True when at least one nRF52 flash method is available in this browser. */
 export function isNrfFlashSupported(): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return typeof (window as any).showDirectoryPicker === 'function'
+  // Nordic DFU only needs Web Serial (already checked by caller).
+  // UF2 additionally needs File System Access API — but we always try DFU first.
+  return true
 }

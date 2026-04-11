@@ -19,7 +19,7 @@ import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
 import { ComboboxField } from "../components/ComboboxField"
-import EspFlasher from "../components/EspFlasher"
+import DeviceFlasher from "../components/DeviceFlasher"
 import { normalizeBuildKey } from "../lib/buildKey"
 import { buildFailurePresentation } from "../lib/formatBuildErrorSummary"
 import { homepageHref, homepageLabel } from "../lib/githubHomepage"
@@ -426,7 +426,7 @@ export default function RepoPage() {
   const ciAndFlasherEl = (
     <div className="max-w-2xl space-y-4 text-sm">
       {showFlashUsbPanel ? (
-        <EspFlasher
+        <DeviceFlasher
           embedded
           bundleUrl={flashUrl!}
           targetEnv={resolvedTargetEnv}

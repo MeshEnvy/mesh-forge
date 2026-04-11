@@ -22,7 +22,7 @@ import {
   runEspFlash,
   type FlashPhase,
 } from "../lib/espFlashRun"
-import { buildNrfPlan, isNrfFlashSupported, runNrfFlash } from "../lib/nrfFlashRun"
+import { runNrfFlash } from "../lib/nrfFlashRun"
 import { resolveFlashTargetFamily } from "../lib/flashTargetFamily"
 import type { FlashManifest, FlashTargetFamily } from "../lib/untarGz"
 import { extractTarGz } from "../lib/untarGz"
@@ -48,7 +48,7 @@ function unsupportedFlashMessage(family: FlashTargetFamily): string | null {
   return null
 }
 
-type EspFlasherProps = {
+type DeviceFlasherProps = {
   bundleUrl: string
   /** PlatformIO env for the selected build; used if manifest omits targetFamily. */
   targetEnv?: string | null
@@ -68,7 +68,7 @@ type EspFlasherProps = {
   embedded?: boolean
 }
 
-export default function EspFlasher({
+export default function DeviceFlasher({
   bundleUrl,
   targetEnv = null,
   flashButtonLabel = "Flash",
@@ -80,7 +80,7 @@ export default function EspFlasher({
   onDownloadBundle = null,
   sharePageUrl = null,
   embedded = false,
-}: EspFlasherProps) {
+}: DeviceFlasherProps) {
   const [busy, setBusy] = useState(false)
   const shareDialogRef = useRef<HTMLDialogElement>(null)
   const [eraseFlashForFactory, setEraseFlashForFactory] = useState(false)
@@ -123,6 +123,8 @@ export default function EspFlasher({
   const canEspFlash = flashBlockedReason === null
 
   const hasFactorySection = useMemo(() => manifestHasFactorySection(layoutPreview), [layoutPreview])
+  // ESP32 can always chip-erase regardless of whether the bundle has a factory section.
+  const canFullReset = resolvedFamily === "esp32" || hasFactorySection
 
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
@@ -144,12 +146,6 @@ export default function EspFlasher({
       toast.error("Web Serial is not supported in this browser")
       return
     }
-    if (resolvedFamily === "nrf52" && !isNrfFlashSupported()) {
-      toast.error("File System Access API not available", {
-        description: "Use Chrome or Edge for nRF52 UF2 flashing.",
-      })
-      return
-    }
     setBusy(true)
     setFlashProgress({ kind: "indeterminate", label: "Select a serial port…" })
     let finishedOk = false
@@ -164,13 +160,11 @@ export default function EspFlasher({
 
       if (resolvedFamily === "nrf52") {
         const manifest = manifestFromMap(files)
-        const plan = buildNrfPlan(files, manifest, eraseFlashForFactory)
-        if (!plan) {
-          toast.error("No UF2 found in bundle")
-          return
-        }
         await runNrfFlash({
-          plan,
+          port: port!,
+          files,
+          manifest,
+          factoryInstall: eraseFlashForFactory,
           onPhase: label => {
             setFlashProgress({ kind: "indeterminate", label })
           },
@@ -180,7 +174,7 @@ export default function EspFlasher({
         })
       } else {
         const plan = buildFlashParts(files, {
-          factoryInstall: eraseFlashForFactory,
+          factoryInstall: eraseFlashForFactory && hasFactorySection,
           resetDeviceStorage: false,
         })
         if (!plan) {
@@ -191,7 +185,7 @@ export default function EspFlasher({
           port,
           parts: plan.parts,
           baud: ESP_FLASH_WEB_BAUD,
-          eraseAll: plan.eraseAll,
+          eraseAll: eraseFlashForFactory || plan.eraseAll,
           onPhase: phase => {
             setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
           },
@@ -300,7 +294,7 @@ export default function EspFlasher({
             role="switch"
             aria-checked={eraseFlashForFactory}
             aria-label="Full device reset (erase and reinstall from scratch)"
-            disabled={!canEspFlash || busy || !hasFactorySection}
+            disabled={!canEspFlash || busy || !canFullReset}
             onClick={() => setEraseFlashForFactory(v => !v)}
             className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border border-slate-600 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${
               eraseFlashForFactory ? "bg-amber-600" : "bg-slate-700"
@@ -316,7 +310,7 @@ export default function EspFlasher({
         </div>
       </div>
 
-      {!hasFactorySection ? (
+      {!canFullReset ? (
         <p className="text-xs text-amber-300/90">
           Full device reset is not available for this bundle—only an update. Typical reasons: an older download, or a
           build that did not include a factory image.
