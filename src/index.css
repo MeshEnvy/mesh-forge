@@ -108,5 +108,48 @@
 
 .ci-progress-shimmer-x {
   position: absolute;
-  animation: ci-progress-shimmer-x 1.45s ease-in-out infinite;
+  animation: ci-progress-shimmer-x 1.45s linear infinite;
+}
+
+/* In-bounds motion (parent uses overflow-hidden, so box-shadow throb was clipped). */
+@keyframes ci-progress-fill-throb {
+  0% {
+    background-position: 0% 0;
+    filter: brightness(0.9) saturate(1.08);
+  }
+  50% {
+    background-position: 100% 0;
+    filter: brightness(1.14) saturate(1.12);
+  }
+  100% {
+    background-position: 0% 0;
+    filter: brightness(0.9) saturate(1.08);
+  }
+}
+
+.ci-progress-fill-throb {
+  background-image: linear-gradient(
+    90deg,
+    rgb(8 145 178),
+    rgb(4 120 87),
+    rgb(45 212 191),
+    rgb(16 185 129),
+    rgb(6 182 212),
+    rgb(8 145 178)
+  );
+  background-size: 240% 100%;
+  animation: ci-progress-fill-throb 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-progress-fill-throb {
+    animation: none;
+    background-size: 100% 100%;
+    filter: none;
+  }
+
+  .ci-progress-shimmer-x {
+    animation: none;
+    left: 20%;
+  }
 }

@@ -485,7 +485,7 @@ export default function RepoPage() {
                         >
                           {pct !== null ? (
                             <div
-                              className="h-full rounded-full bg-linear-to-r from-cyan-600 to-emerald-500 transition-[width] duration-500 ease-out shadow-[0_0_12px_rgba(34,211,238,0.35)]"
+                              className="ci-progress-fill-throb h-full rounded-full transition-[width] duration-500 ease-out"
                               style={{ width: `${pct}%` }}
                             />
                           ) : (
