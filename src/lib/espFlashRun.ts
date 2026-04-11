@@ -167,7 +167,11 @@ export async function runEspFlash(options: {
     reportProgress: (i, written, total) => {
       let offset = 0
       for (let j = 0; j < i; j++) offset += lengths[j] ?? 0
-      const overallPct = totalBytes > 0 ? Math.min(100, Math.round((100 * (offset + written)) / totalBytes)) : 0
+      const uncSize = lengths[i] ?? 0
+      // Callback counts deflated bytes; scale by uncompressed image size for the bar.
+      const streamFrac = total > 0 ? written / total : 0
+      const overallBytes = offset + streamFrac * uncSize
+      const overallPct = totalBytes > 0 ? Math.min(100, Math.round((100 * overallBytes) / totalBytes)) : 0
       onWriteProgress?.({
         imageIndex: i,
         imageCount: fileArray.length,
@@ -181,7 +185,7 @@ export async function runEspFlash(options: {
         lastProgressLogImage = i
         lastProgressLogDecile = decile
         console.log(
-          `[esptool] flash image ${i + 1}/${fileArray.length}: ${written}/${total} bytes (${overallPct}% overall)`
+          `[esptool] flash image ${i + 1}/${fileArray.length}: compressed stream ${written}/${total} bytes, ${overallPct}% overall (uncompressed-weighted)`
         )
       }
     },
