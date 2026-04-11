@@ -6,7 +6,9 @@ If BUILD_DIR/flash-manifest.json already exists (project-supplied), merge in
 targetFamily from PlatformIO when missing.
 
 Otherwise, if Meshtastic-style *.mt.json is present, synthesize a manifest
-from partition table + on-disk artifacts.
+from partition table + on-disk split artifacts (no *.factory.bin — USB bundles
+omit the merged image). Only LittleFS rows use optional:true (Mesh Forge:
+Reset device storage).
 
 Optional args: PROJECT_ROOT TARGET_ENV — merged PIO config for that env fills
 targetFamily (and platform/board) for the USB flasher UI.
@@ -148,20 +150,6 @@ def part_offset_for_slot(parts: list[dict], part_name: str) -> int | None:
     return None
 
 
-def factory_app_offset(parts: list[dict]) -> int:
-    for p in parts:
-        if str(p.get("subtype", "")) == "factory":
-            o = parse_offset(p.get("offset"))
-            if o is not None:
-                return o
-    for p in parts:
-        if p.get("type") == "app" and p.get("subtype") == "ota_0":
-            o = parse_offset(p.get("offset"))
-            if o is not None:
-                return o
-    return 0x10000
-
-
 def ota1_offset(parts: list[dict]) -> int | None:
     for p in parts:
         if str(p.get("subtype", "")) == "ota_1":
@@ -179,27 +167,19 @@ def _offset_int(im: dict) -> int:
 
 
 def _dedupe_same_offset(images: list[dict]) -> list[dict]:
-    """
-    One esptool image per physical offset. Meshtastic maps both firmware-*.bin (app0)
-    and firmware-*.factory.bin to the same ota_0 slot — keep factory, drop the duplicate.
-    """
+    """One esptool image per physical offset (prefer non-optional, then lexicographic file)."""
     buckets: dict[int, list[dict]] = {}
     for im in images:
         buckets.setdefault(_offset_int(im), []).append(im)
 
-    def rank(im: dict) -> tuple:
-        f = im["file"]
-        opt = im.get("optional") is True
-        if re.search(r"\.factory\.bin$", f, re.I):
-            return (0, 0 if not opt else 1, f)
-        if not opt:
-            return (1, 0, f)
-        return (2, 0, f)
-
     out: list[dict] = []
     for off in sorted(buckets):
         group = buckets[off]
-        out.append(group[0] if len(group) == 1 else min(group, key=rank))
+        out.append(
+            group[0]
+            if len(group) == 1
+            else min(group, key=lambda im: (im.get("optional") is True, str(im.get("file", ""))))
+        )
     return out
 
 
@@ -233,19 +213,10 @@ def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
         off = part_offset_for_slot(parts, str(part_name))
         if off is None:
             continue
-        opt = bool(
-            fname.startswith("littlefs-")
-            or re.match(r"^mt-.+-ota\.bin$", fname, re.I)
-            or (
-                re.match(r"^firmware-.+\.bin$", fname, re.I)
-                and not re.search(r"\.factory\.bin$", fname, re.I)
-            )
-        )
+        # Only LittleFS is optional in the bundle; Mesh Forge flashes it when the user enables
+        # "Reset device storage". Bootloader, partitions, app, and BLE OTA are always flashed when present.
+        opt = bool(fname.startswith("littlefs-"))
         add(fname, off, optional=opt)
-
-    factory_bins = sorted(n for n in names if re.match(r"^firmware-.+\.factory\.bin$", n, re.I))
-    if factory_bins:
-        add(factory_bins[0], factory_app_offset(parts))
 
     for n in sorted(names):
         if n.startswith("littlefs-") and n.endswith(".bin"):
@@ -257,7 +228,7 @@ def emit_from_mt(build_dir: str, mt: dict) -> dict | None:
         if re.match(r"^mt-.+-ota\.bin$", n, re.I):
             off = ota1_offset(parts)
             if off is not None:
-                add(n, off, optional=True)
+                add(n, off, optional=False)
 
     if not images:
         return None

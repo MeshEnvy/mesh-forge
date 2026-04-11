@@ -1,12 +1,24 @@
 import { Button } from "@/components/ui/button"
-import { Check, CheckCircle2, X } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Github,
+  Link2,
+  Mail,
+  PlayCircle,
+  Share2,
+  Smartphone,
+  X,
+} from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { buildFlashParts, flashInstallRowsFromManifest, manifestFromMap } from "../lib/espFlashLayout"
+import { buildFlashParts, manifestFromMap } from "../lib/espFlashLayout"
 import {
   ensureSerialPortClosed,
+  ESP_FLASH_WEB_BAUD,
   isSerialUserCancelledError,
-  pulseUsbBootloaderPort,
+  pulseUsbBootloaderOnPort,
   runEspFlash,
   type FlashPhase,
 } from "../lib/espFlashRun"
@@ -42,34 +54,43 @@ type EspFlasherProps = {
   bundleUrl: string
   /** PlatformIO env for the selected build; used if manifest omits targetFamily. */
   targetEnv?: string | null
-  /** Primary CTA label (default matches standalone copy). */
   flashButtonLabel?: string
   flashBusyLabel?: string
   flashButtonSize?: "default" | "lg"
   className?: string
-  /** Tighter copy when shown in the repo hero. */
-  condensed?: boolean
+  /** Firmware source repo tree at this ref (no target / flash path segment). */
+  githubRepoTreeHref?: string | null
+  /** Mesh Forge GitHub Actions run for this build. */
+  githubActionsRunHref?: string | null
+  /** Download firmware bundle (icon button below controls). */
+  onDownloadBundle?: (() => void) | null
+  /** Current page URL for the share popover (exact flasher view). */
+  sharePageUrl?: string | null
+  /** Omit outer card chrome when parent already provides the bordered container. */
+  embedded?: boolean
 }
 
 export default function EspFlasher({
   bundleUrl,
   targetEnv = null,
-  flashButtonLabel = "Connect serial & flash",
-  flashBusyLabel = "Flashing…",
-  flashButtonSize = "default",
+  flashButtonLabel = "Flash",
+  flashBusyLabel = "Writing…",
+  flashButtonSize = "lg",
   className = "",
-  condensed = false,
+  githubRepoTreeHref = null,
+  githubActionsRunHref = null,
+  onDownloadBundle = null,
+  sharePageUrl = null,
+  embedded = false,
 }: EspFlasherProps) {
   const [busy, setBusy] = useState(false)
-  const [eraseAll, setEraseAll] = useState(false)
-  const [baud, setBaud] = useState(921600)
+  const shareDialogRef = useRef<HTMLDialogElement>(null)
+  const [resetDeviceStorage, setResetDeviceStorage] = useState(false)
   const [layoutPreview, setLayoutPreview] = useState<FlashManifest | null>(null)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
   const [bundleLoadError, setBundleLoadError] = useState<string | null>(null)
-  const [dfuPulsedOnce, setDfuPulsedOnce] = useState(false)
 
   useEffect(() => {
-    setDfuPulsedOnce(false)
     setLayoutPreview(null)
     setBundleLoadError(null)
     let cancelled = false
@@ -102,11 +123,6 @@ export default function EspFlasher({
   const flashBlockedReason = unsupportedFlashMessage(resolvedFamily)
   const canEspFlash = flashBlockedReason === null
 
-  const installPlanRows = useMemo(
-    () => (layoutPreview ? flashInstallRowsFromManifest(layoutPreview, eraseAll) : []),
-    [layoutPreview, eraseAll]
-  )
-
   const prepareBundle = useCallback(async () => {
     const res = await fetch(bundleUrl)
     if (!res.ok) throw new Error(`Download failed: ${res.status}`)
@@ -132,9 +148,12 @@ export default function EspFlasher({
     let port: SerialPort | undefined
     try {
       port = await navigator.serial.requestPort()
+      setFlashProgress({ kind: "indeterminate", label: "USB bootloader reset…" })
+      await pulseUsbBootloaderOnPort(port)
+
       setFlashProgress({ kind: "indeterminate", label: "Downloading firmware…" })
       const files = await prepareBundle()
-      const parts = buildFlashParts(files, { eraseAll })
+      const parts = buildFlashParts(files, { resetDeviceStorage })
       if (!parts) {
         toast.error("Could not detect flash layout from bundle")
         return
@@ -143,8 +162,8 @@ export default function EspFlasher({
       await runEspFlash({
         port,
         parts,
-        baud,
-        eraseAll,
+        baud: ESP_FLASH_WEB_BAUD,
+        eraseAll: false,
         onPhase: phase => {
           setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
         },
@@ -174,51 +193,55 @@ export default function EspFlasher({
         setFlashProgress(null)
       }
     }
-  }, [baud, eraseAll, prepareBundle, canEspFlash, flashBlockedReason])
+  }, [resetDeviceStorage, prepareBundle, canEspFlash, flashBlockedReason])
 
-  const enterDfuMode = useCallback(async () => {
-    try {
-      await pulseUsbBootloaderPort()
-      setDfuPulsedOnce(true)
-      toast.success("1200-baud touch sent", {
-        description:
-          "If the device re-enumerated, pick the serial port and flash. If not, hold BOOT, tap RST, then try again.",
-      })
-    } catch (e) {
-      if (isSerialUserCancelledError(e)) {
-        return
-      }
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
+  const shareUrlTrimmed = useMemo(() => sharePageUrl?.trim() ?? "", [sharePageUrl])
+  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
+
+  const closeShareDialog = useCallback(() => {
+    shareDialogRef.current?.close()
   }, [])
 
-  const familyLine =
-    resolvedFamily !== "esp32" || layoutPreview?.targetFamily
-      ? `Target: ${resolvedFamily}${layoutPreview?.platform ? ` · ${layoutPreview.platform.trim()}` : ""}`
-      : null
+  const hasIconRow =
+    Boolean(githubRepoTreeHref?.trim()) ||
+    Boolean(githubActionsRunHref?.trim()) ||
+    typeof onDownloadBundle === "function" ||
+    Boolean(shareUrlTrimmed)
+
+  const copyShareLink = useCallback(async () => {
+    if (!shareUrlTrimmed) return
+    try {
+      await navigator.clipboard.writeText(shareUrlTrimmed)
+      toast.success("Link copied")
+      closeShareDialog()
+    } catch {
+      toast.error("Could not copy link")
+    }
+  }, [shareUrlTrimmed, closeShareDialog])
+
+  const openNativeShare = useCallback(async () => {
+    if (!shareUrlTrimmed || !canNativeShare) return
+    try {
+      await navigator.share({
+        url: shareUrlTrimmed,
+        title: "Mesh Forge Web Flasher",
+      })
+      closeShareDialog()
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return
+      toast.error("Share was cancelled or failed")
+    }
+  }, [shareUrlTrimmed, canNativeShare, closeShareDialog])
+
+  const rootClass = embedded
+    ? `space-y-3 ${className}`.trim()
+    : `rounded-lg border border-slate-700 bg-slate-900/50 p-4 space-y-3 ${className}`.trim()
 
   return (
-    <div className={`rounded-lg border border-slate-700 bg-slate-900/50 p-4 space-y-3 ${className}`.trim()}>
-      {condensed ? null : (
-        <>
-          <h3 className="text-lg font-semibold text-white">USB firmware flash (Web Serial)</h3>
-          <p className="text-sm text-slate-400">
-            esptool-js for ESP32-class layouts. Put the board in <strong>ROM serial-download mode</strong> if needed —
-            use <strong>Enter DFU mode</strong> for the USB CDC 1200-baud touch when supported.
-          </p>
-        </>
-      )}
-      {condensed ? (
-        <p className="text-sm text-slate-400">
-          Chromium Web Serial + esptool-js (ESP32-class). Verify the flash map — wrong images can brick hardware.
-        </p>
-      ) : null}
-
+    <div className={rootClass}>
       {bundleLoadError ? (
         <p className="text-xs text-amber-300/90">Could not prefetch bundle: {bundleLoadError}</p>
       ) : null}
-
-      {familyLine ? <p className="text-xs font-mono text-slate-400">{familyLine}</p> : null}
 
       {flashBlockedReason ? (
         <p className="text-sm text-amber-200/90 rounded-md border border-amber-800/40 bg-amber-950/30 px-3 py-2">
@@ -226,82 +249,7 @@ export default function EspFlasher({
         </p>
       ) : null}
 
-      {layoutPreview ? (
-        <div className="space-y-1">
-          <table className="w-full text-left text-xs font-mono text-slate-300 border border-slate-600 rounded-md overflow-hidden">
-            <thead className="bg-slate-800/80 text-slate-400">
-              <tr>
-                <th className="px-2 py-1.5 font-medium" scope="col">
-                  Image
-                </th>
-                <th className="px-2 py-1.5 font-medium w-30" scope="col">
-                  Offset
-                </th>
-                <th className="px-2 py-1.5 font-medium w-24 text-center" scope="col">
-                  Install
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {installPlanRows.map((row, i) => (
-                <tr key={`${row.offset}-${i}-${row.file}`} className="border-t border-slate-700/80">
-                  <td className="px-2 py-1.5 break-all">{row.file}</td>
-                  <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{row.offsetHex}</td>
-                  <td className="px-2 py-1.5 text-center align-middle">
-                    {row.willInstall ? (
-                      <span className="inline-flex items-center justify-center text-emerald-400" title="Will flash">
-                        <Check className="h-4 w-4" aria-hidden />
-                        <span className="sr-only">Yes</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center justify-center text-red-400" title="Skipped (enable full chip erase)">
-                        <X className="h-4 w-4" aria-hidden />
-                        <span className="sr-only">No</span>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-[11px] text-slate-500">
-            Optional images are skipped unless <span className="text-slate-400">Full chip erase</span> is checked.
-          </p>
-        </div>
-      ) : (
-        <p className="text-xs text-slate-500">
-          Default layout: bootloader @ 0x1000, partitions @ 0x8000, app @ 0x10000, optional boot_app0 @ 0xe000—or single
-          firmware.bin @ 0x0. With <code className="text-slate-400">flash-manifest.json</code>, offsets come from the
-          bundle.
-        </p>
-      )}
-
-      <div className="flex flex-wrap gap-3 items-center">
-        <label className="text-sm text-slate-300 flex items-center gap-2">
-          Baud
-          <select
-            className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white"
-            value={baud}
-            onChange={e => setBaud(Number(e.target.value))}
-            disabled={!canEspFlash}
-          >
-            <option value={115200}>115200</option>
-            <option value={460800}>460800</option>
-            <option value={921600}>921600</option>
-          </select>
-        </label>
-        <label className="text-sm text-slate-300 flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={eraseAll}
-            onChange={e => setEraseAll(e.target.checked)}
-            disabled={!canEspFlash}
-          />
-          Full chip erase (destructive)
-        </label>
-      </div>
-
-      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button
           type="button"
           size={flashButtonSize}
@@ -311,10 +259,217 @@ export default function EspFlasher({
         >
           {busy ? flashBusyLabel : flashButtonLabel}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => void enterDfuMode()}>
-          {dfuPulsedOnce ? "Enter DFU mode (again)" : "Enter DFU mode"}
-        </Button>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={resetDeviceStorage}
+            aria-label="Reset device storage"
+            disabled={!canEspFlash}
+            onClick={() => setResetDeviceStorage(v => !v)}
+            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border border-slate-600 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+              resetDeviceStorage ? "bg-amber-600" : "bg-slate-700"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-6 w-6 translate-y-0.5 rounded-full bg-white shadow transition-transform duration-200 ease-out ${
+                resetDeviceStorage ? "translate-x-[22px]" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-sm font-medium text-slate-200">Reset device storage</span>
+        </div>
       </div>
+
+      {resetDeviceStorage ? (
+        <p
+          className="text-sm text-red-400 border border-red-500/40 bg-red-950/35 rounded-md px-3 py-2"
+          role="status"
+        >
+          <strong className="font-semibold text-red-300">Warning:</strong> all user data on the device will be deleted
+          when you flash (channels, preferences, and stored files).
+        </p>
+      ) : null}
+
+      {hasIconRow ? (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {githubRepoTreeHref?.trim() ? (
+            <a
+              href={githubRepoTreeHref.trim()}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+              title="View source on GitHub"
+            >
+              <Github className="h-5 w-5" aria-hidden />
+              <span className="sr-only">View source on GitHub</span>
+            </a>
+          ) : null}
+          {githubActionsRunHref?.trim() ? (
+            <a
+              href={githubActionsRunHref.trim()}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+              title="View build on GitHub"
+            >
+              <PlayCircle className="h-5 w-5" aria-hidden />
+              <span className="sr-only">View build on GitHub</span>
+            </a>
+          ) : null}
+          {typeof onDownloadBundle === "function" ? (
+            <button
+              type="button"
+              onClick={() => onDownloadBundle()}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+              title="Download bundle"
+            >
+              <Download className="h-5 w-5" aria-hidden />
+              <span className="sr-only">Download bundle</span>
+            </button>
+          ) : null}
+          {shareUrlTrimmed ? (
+            <>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+                title="Share this page"
+                onClick={() => shareDialogRef.current?.showModal()}
+              >
+                <Share2 className="h-5 w-5" aria-hidden />
+                <span className="sr-only">Share this page</span>
+              </button>
+              <dialog
+                ref={shareDialogRef}
+                className="fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 text-slate-100 backdrop:bg-slate-950/65 backdrop:backdrop-blur-[2px]"
+                onClick={e => {
+                  if (e.target === e.currentTarget) closeShareDialog()
+                }}
+              >
+                <div
+                  className="flex min-h-full w-full items-center justify-center p-4 sm:p-8"
+                  onClick={e => {
+                    if (e.target === e.currentTarget) closeShareDialog()
+                  }}
+                >
+                  <div
+                    className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_25px_80px_-12px_rgba(0,0,0,0.85)]"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div
+                      className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-amber-500/50 to-transparent"
+                      aria-hidden
+                    />
+                    <header className="border-b border-slate-800/90 bg-slate-900/40 px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+                      <button
+                        type="button"
+                        className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70"
+                        onClick={closeShareDialog}
+                        aria-label="Close"
+                      >
+                        <X className="h-5 w-5" aria-hidden />
+                      </button>
+                      <div className="flex gap-4 pr-10">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-amber-500/20 to-cyan-600/10 text-amber-400 ring-1 ring-amber-500/25">
+                          <Share2 className="h-6 w-6" aria-hidden />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <h2 className="text-lg font-semibold tracking-tight text-slate-50">Share Web Flasher</h2>
+                          <p className="text-sm leading-relaxed text-slate-400">
+                            Same firmware view in Mesh Forge — repo, ref, target, and bundle.
+                          </p>
+                        </div>
+                      </div>
+                    </header>
+                    <div className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Link</p>
+                        <p className="mt-2 max-h-24 overflow-y-auto rounded-xl border border-slate-700/80 bg-slate-900/60 px-3.5 py-3 font-mono text-[12px] leading-snug text-slate-300 wrap-anywhere">
+                          {shareUrlTrimmed}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          type="button"
+                          className="h-11 w-full gap-2 bg-amber-600 text-white hover:bg-amber-500"
+                          onClick={() => void copyShareLink()}
+                        >
+                          <Link2 className="h-4 w-4" aria-hidden />
+                          Copy link
+                        </Button>
+                        {canNativeShare ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 w-full gap-2 border-slate-600 bg-slate-900/50 text-slate-100 hover:bg-slate-800"
+                            onClick={() => void openNativeShare()}
+                          >
+                            <Smartphone className="h-4 w-4" aria-hidden />
+                            Share via this device
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Open or post</p>
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            title="Open in new tab"
+                            className="h-11 gap-2 border-slate-600 bg-slate-900/40 text-slate-200 hover:bg-slate-800"
+                            onClick={() => {
+                              window.open(shareUrlTrimmed, "_blank", "noopener,noreferrer")
+                              closeShareDialog()
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                            <span className="truncate">New tab</span>
+                          </Button>
+                          <a
+                            href={`mailto:?subject=${encodeURIComponent("Mesh Forge Web Flasher")}&body=${encodeURIComponent(shareUrlTrimmed)}`}
+                            title="Email this link"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-600 bg-slate-900/40 px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                            onClick={closeShareDialog}
+                          >
+                            <Mail className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                            <span className="truncate">Email</span>
+                          </a>
+                          <a
+                            href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrlTrimmed)}&text=${encodeURIComponent("Mesh Forge Web Flasher")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Post on X"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-600 bg-slate-900/40 px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                            onClick={closeShareDialog}
+                          >
+                            <span className="shrink-0 text-[13px] font-bold leading-none text-slate-100" aria-hidden>
+                              𝕏
+                            </span>
+                            <span className="truncate">X</span>
+                          </a>
+                          <a
+                            href={`https://bsky.app/intent/compose?text=${encodeURIComponent(shareUrlTrimmed)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Post on Bluesky"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-600 bg-slate-900/40 px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                            onClick={closeShareDialog}
+                          >
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]" aria-hidden />
+                            <span className="truncate">Bluesky</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </dialog>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {flashProgress ? (
         flashProgress.kind === "complete" ? (

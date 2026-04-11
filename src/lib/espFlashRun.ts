@@ -191,16 +191,18 @@ export async function runEspFlash(options: {
   await transport.disconnect()
 }
 
+/** Conservative default for `runEspFlash` over Web Serial (fewer cable/hub issues than 921600). */
+export const ESP_FLASH_WEB_BAUD = 115200
+
 /** Match MeshCore `lib/dfu.js` CDC touch timing (1200 baud → close → wait for re-enumeration). */
 const CDC_TOUCH_OPEN_MS = 100
 const CDC_TOUCH_AFTER_CLOSE_MS = 1500
 
-/** Classic ESP32/S3 (and many nRF CDC) USB bootloader entry: open port at 1200 baud, then close and wait. */
-export async function pulseUsbBootloaderPort(): Promise<void> {
-  if (!("serial" in navigator)) {
-    throw new Error("Web Serial is not available")
-  }
-  const port = await navigator.serial.requestPort()
+/**
+ * USB CDC “1200 baud” bootloader entry on a port the user already picked (ESP32-class).
+ * Closes the port when done; wait before returning so the device can re-enumerate.
+ */
+export async function pulseUsbBootloaderOnPort(port: SerialPort): Promise<void> {
   await ensureSerialPortClosed(port)
   try {
     await openSerialPortWithRecovery(port, { baudRate: 1200 })
@@ -209,4 +211,13 @@ export async function pulseUsbBootloaderPort(): Promise<void> {
     await ensureSerialPortClosed(port)
   }
   await sleepMs(CDC_TOUCH_AFTER_CLOSE_MS)
+}
+
+/** Prompt for a serial port, then run {@link pulseUsbBootloaderOnPort}. */
+export async function pulseUsbBootloaderPort(): Promise<void> {
+  if (!("serial" in navigator)) {
+    throw new Error("Web Serial is not available")
+  }
+  const port = await navigator.serial.requestPort()
+  await pulseUsbBootloaderOnPort(port)
 }

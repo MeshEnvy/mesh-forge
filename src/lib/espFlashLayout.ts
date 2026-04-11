@@ -2,22 +2,17 @@ import { findInTar, parseFlashManifest, type FlashManifest, type FlashManifestIm
 
 export type FlashPart = { data: Uint8Array; address: number; name: string }
 
-export type FlashInstallPlanRow = {
-  file: string
-  offset: number
-  offsetHex: string
-  optional: boolean
-  willInstall: boolean
-}
-
 function manifestImageOffset(im: FlashManifestImage): number | null {
   const addr = typeof im.offset === 'string' ? parseInt(im.offset, 0) : Number(im.offset)
   return Number.isFinite(addr) ? addr : null
 }
 
 export type BuildFlashPartsOptions = {
-  /** When false, manifest rows with optional:true are omitted. */
-  eraseAll?: boolean
+  /**
+   * When true, flash optional LittleFS images from the manifest (wipes Meshtastic storage on device).
+   * Bootloader, partitions, firmware, and other non-LittleFS images are always included when present.
+   */
+  resetDeviceStorage?: boolean
 }
 
 function sortFlashParts(parts: FlashPart[]): FlashPart[] {
@@ -29,9 +24,14 @@ function tarBasename(path: string): string {
   return parts[parts.length - 1] ?? path
 }
 
+function isLittlefsManifestFile(file: string): boolean {
+  const base = tarBasename(file)
+  return base.toLowerCase().startsWith('littlefs-') && base.toLowerCase().endsWith('.bin')
+}
+
 /**
  * PlatformIO projects (e.g. Meshtastic) often emit versioned names like
- * firmware-heltec-v3-2.7.20.factory.bin instead of firmware.factory.bin.
+ * firmware-heltec-v3-2.7.20.bin (split app image; merged factory.bin is not bundled for USB flash).
  */
 function resolveVersionedFirmwareApp(
   files: Map<string, Uint8Array>
@@ -52,9 +52,6 @@ function resolveVersionedFirmwareApp(
     list.push({ base, data })
   }
 
-  const factory = list.find(e => /^firmware-.+\.factory\.bin$/i.test(e.base))
-  if (factory) return { data: factory.data, name: factory.base }
-
   const app = list.find(
     e => /^firmware-.+\.bin$/i.test(e.base) && !/\.factory\.bin$/i.test(e.base)
   )
@@ -63,31 +60,12 @@ function resolveVersionedFirmwareApp(
   return undefined
 }
 
-/** Sorted install plan for UI; `willInstall` matches `buildFlashParts` optional + eraseAll rules. */
-export function flashInstallRowsFromManifest(m: FlashManifest, eraseAll: boolean): FlashInstallPlanRow[] {
-  const rows: FlashInstallPlanRow[] = []
-  for (const im of m.images) {
-    const offset = manifestImageOffset(im)
-    if (offset === null) continue
-    const optional = im.optional === true
-    const willInstall = !optional || eraseAll
-    rows.push({
-      file: im.file,
-      offset,
-      offsetHex: `0x${offset.toString(16)}`,
-      optional,
-      willInstall,
-    })
-  }
-  return rows.sort((a, b) => a.offset - b.offset)
-}
-
 /** Build ordered flash parts from a flat map (tar paths or bare filenames → bytes). */
 export function buildFlashParts(
   files: Map<string, Uint8Array>,
   options: BuildFlashPartsOptions = {}
 ): FlashPart[] | null {
-  const eraseAll = options.eraseAll ?? false
+  const resetDeviceStorage = options.resetDeviceStorage ?? false
 
   const manifestRaw = findInTar(files, 'flash-manifest.json')
   if (manifestRaw) {
@@ -96,7 +74,7 @@ export function buildFlashParts(
     if (m) {
       const out: FlashPart[] = []
       for (const img of m.images) {
-        if (!eraseAll && img.optional === true) continue
+        if (img.optional === true && isLittlefsManifestFile(img.file) && !resetDeviceStorage) continue
         const data = findInTar(files, img.file)
         if (!data) return null
         const addr = typeof img.offset === 'string' ? parseInt(img.offset, 0) : Number(img.offset)
@@ -110,16 +88,12 @@ export function buildFlashParts(
   const bootloader = findInTar(files, 'bootloader.bin')
   const partitions = findInTar(files, 'partitions.bin')
   const bootApp0 = findInTar(files, 'boot_app0.bin')
-  const factoryExact = findInTar(files, 'firmware.factory.bin')
   const firmwareExact = findInTar(files, 'firmware.bin')
   const versioned = resolveVersionedFirmwareApp(files)
 
   let app: Uint8Array | undefined
   let appName: string | undefined
-  if (factoryExact) {
-    app = factoryExact
-    appName = 'firmware.factory.bin'
-  } else if (firmwareExact) {
+  if (firmwareExact) {
     app = firmwareExact
     appName = 'firmware.bin'
   } else if (versioned) {

@@ -127,12 +127,14 @@ jobs:
           mkdir -p "$STAGE"
           shopt -s nullglob
           for f in "$BUILD_DIR"/*.bin "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex; do
+            case "$f" in *.factory.bin) continue ;; esac
             cp -a "$f" "$STAGE/"
           done
           shopt -u nullglob
           if [ -f "$BUILD_DIR/flash-manifest.json" ]; then
             cp -a "$BUILD_DIR/flash-manifest.json" "$STAGE/"
           fi
+          bash "${{ github.workspace }}/scripts/stage-fw-bundle-docs.sh" "$ROOT" "$STAGE"
           if [ -z "$(find "$STAGE" -mindepth 1 -maxdepth 1 -type f -print -quit)" ]; then
             echo "No firmware artifacts found in $BUILD_DIR"
             exit 1
