@@ -22,6 +22,7 @@ import {
   runEspFlash,
   type FlashPhase,
 } from "../lib/espFlashRun"
+import { buildNrfPlan, isNrfFlashSupported, runNrfFlash } from "../lib/nrfFlashRun"
 import { resolveFlashTargetFamily } from "../lib/flashTargetFamily"
 import type { FlashManifest, FlashTargetFamily } from "../lib/untarGz"
 import { extractTarGz } from "../lib/untarGz"
@@ -38,9 +39,6 @@ const PHASE_LABEL: Record<FlashPhase, string> = {
 }
 
 function unsupportedFlashMessage(family: FlashTargetFamily): string | null {
-  if (family === "nrf52") {
-    return "This bundle targets nRF52. In-browser flashing here uses esptool (ESP32). Use adafruit-nrfutil / nrfutil with the ZIP from Download bundle, or your board’s UF2/DFU workflow."
-  }
   if (family === "rp2040") {
     return "This bundle targets RP2040. Use UF2 drag-and-drop or picotool with artifacts from Download bundle — Web Serial esptool here is for ESP32-class boards only."
   }
@@ -146,6 +144,12 @@ export default function EspFlasher({
       toast.error("Web Serial is not supported in this browser")
       return
     }
+    if (resolvedFamily === "nrf52" && !isNrfFlashSupported()) {
+      toast.error("File System Access API not available", {
+        description: "Use Chrome or Edge for nRF52 UF2 flashing.",
+      })
+      return
+    }
     setBusy(true)
     setFlashProgress({ kind: "indeterminate", label: "Select a serial port…" })
     let finishedOk = false
@@ -157,36 +161,59 @@ export default function EspFlasher({
 
       setFlashProgress({ kind: "indeterminate", label: "Downloading firmware…" })
       const files = await prepareBundle()
-      const plan = buildFlashParts(files, {
-        factoryInstall: eraseFlashForFactory,
-        resetDeviceStorage: false,
-      })
-      if (!plan) {
-        toast.error("Could not detect flash layout from bundle")
-        return
+
+      if (resolvedFamily === "nrf52") {
+        const manifest = manifestFromMap(files)
+        const plan = buildNrfPlan(files, manifest, eraseFlashForFactory)
+        if (!plan) {
+          toast.error("No UF2 found in bundle")
+          return
+        }
+        await runNrfFlash({
+          plan,
+          onPhase: label => {
+            setFlashProgress({ kind: "indeterminate", label })
+          },
+          onWriteProgress: p => {
+            setFlashProgress({ kind: "determinate", label: "Writing firmware…", pct: p.pct })
+          },
+        })
+      } else {
+        const plan = buildFlashParts(files, {
+          factoryInstall: eraseFlashForFactory,
+          resetDeviceStorage: false,
+        })
+        if (!plan) {
+          toast.error("Could not detect flash layout from bundle")
+          return
+        }
+        await runEspFlash({
+          port,
+          parts: plan.parts,
+          baud: ESP_FLASH_WEB_BAUD,
+          eraseAll: plan.eraseAll,
+          onPhase: phase => {
+            setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
+          },
+          onWriteProgress: p => {
+            setFlashProgress({
+              kind: "determinate",
+              label: `Writing firmware (${p.imageIndex + 1}/${p.imageCount})`,
+              pct: p.overallPct,
+            })
+          },
+        })
       }
 
-      await runEspFlash({
-        port,
-        parts: plan.parts,
-        baud: ESP_FLASH_WEB_BAUD,
-        eraseAll: plan.eraseAll,
-        onPhase: phase => {
-          setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
-        },
-        onWriteProgress: p => {
-          setFlashProgress({
-            kind: "determinate",
-            label: `Writing firmware (${p.imageIndex + 1}/${p.imageCount})`,
-            pct: p.overallPct,
-          })
-        },
-      })
       finishedOk = true
       setFlashProgress({ kind: "complete" })
       toast.success("Flash complete")
     } catch (e) {
       if (isSerialUserCancelledError(e)) {
+        return
+      }
+      // User dismissed the directory picker (nRF52 UF2 flow)
+      if (e instanceof DOMException && e.name === "AbortError") {
         return
       }
       const msg = e instanceof Error ? e.message : String(e)
@@ -200,7 +227,7 @@ export default function EspFlasher({
         setFlashProgress(null)
       }
     }
-  }, [eraseFlashForFactory, prepareBundle, canEspFlash, flashBlockedReason])
+  }, [eraseFlashForFactory, prepareBundle, canEspFlash, flashBlockedReason, resolvedFamily])
 
   const shareUrlTrimmed = useMemo(() => sharePageUrl?.trim() ?? "", [sharePageUrl])
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function"

@@ -324,6 +324,115 @@ def pick_mt_json(build_dir: str) -> str | None:
     return fw[0] if fw else paths[0]
 
 
+# ---------------------------------------------------------------------------
+# Path 3 — generic nRF52 (UF2 bootloader, no *.mt.json)
+# ---------------------------------------------------------------------------
+
+def _pick_firmware_uf2(names: set[str]) -> str | None:
+    """Return the best candidate firmware *.uf2 (exclude nuke.uf2)."""
+    cands = sorted(
+        n for n in names
+        if n.lower().endswith(".uf2") and n.lower() != "nuke.uf2"
+    )
+    # Prefer names starting with "firmware"
+    fw = [n for n in cands if n.lower().startswith("firmware")]
+    return fw[0] if fw else (cands[0] if cands else None)
+
+
+def emit_generic_nrf52(names: set[str]) -> dict | None:
+    """
+    Emit a UF2-based manifest for nRF52 builds.
+    update: firmware *.uf2 with role "uf2"
+    factory (optional): nuke.uf2 (role "nuke") + firmware *.uf2, eraseFlash true
+    """
+    fw_uf2 = _pick_firmware_uf2(names)
+    if not fw_uf2:
+        return None
+
+    doc: dict = {
+        "update": {
+            "images": [{"file": fw_uf2, "offset": 0, "role": "uf2"}],
+            "eraseFlash": False,
+        }
+    }
+
+    if "nuke.uf2" in names:
+        doc["factory"] = {
+            "images": [
+                {"file": "nuke.uf2", "offset": 0, "role": "nuke"},
+                {"file": fw_uf2, "offset": 0, "role": "uf2"},
+            ],
+            "eraseFlash": True,
+        }
+
+    return doc
+
+
+# ---------------------------------------------------------------------------
+# Path 4 — generic ESP32 (standard PlatformIO bins, no *.mt.json)
+# ---------------------------------------------------------------------------
+
+# Standard PlatformIO ESP32 flash offsets
+_ESP32_OFFSETS: dict[str, int] = {
+    "bootloader.bin": 0x1000,
+    "partitions.bin": 0x8000,
+    "boot_app0.bin": 0xE000,
+}
+_ESP32_APP_OFFSET = 0x10000
+
+
+def _pick_esp32_app_bin(names: set[str]) -> str | None:
+    """Return firmware app bin (versioned or exact), excluding factory images."""
+    if "firmware.bin" in names:
+        return "firmware.bin"
+    cands = sorted(
+        n for n in names
+        if re.match(r"^firmware-.+\.bin$", n, re.I) and not re.search(r"\.factory\.bin$", n, re.I)
+    )
+    return cands[0] if cands else None
+
+
+def emit_generic_esp32(names: set[str]) -> dict | None:
+    """
+    Emit a standard ESP32 manifest from PlatformIO bin output.
+    update: bootloader + partitions + app (+ boot_app0 if present)
+    factory (optional): firmware-*.factory.bin @ 0x0, eraseFlash true
+    """
+    bootloader = "bootloader.bin" if "bootloader.bin" in names else None
+    partitions = "partitions.bin" if "partitions.bin" in names else None
+    app_bin = _pick_esp32_app_bin(names)
+
+    if not (bootloader and partitions and app_bin):
+        # Not enough for a canonical ESP32 layout
+        return None
+
+    update_images: list[dict] = [
+        {"file": "bootloader.bin", "offset": _ESP32_OFFSETS["bootloader.bin"]},
+        {"file": "partitions.bin", "offset": _ESP32_OFFSETS["partitions.bin"]},
+    ]
+    if "boot_app0.bin" in names:
+        update_images.append({"file": "boot_app0.bin", "offset": _ESP32_OFFSETS["boot_app0.bin"]})
+    update_images.append({"file": app_bin, "offset": _ESP32_APP_OFFSET})
+    update_images.sort(key=lambda im: im["offset"])
+
+    doc: dict = {
+        "update": {"images": update_images, "eraseFlash": False}
+    }
+
+    factory_bin = pick_factory_bin(names)
+    if factory_bin:
+        doc["factory"] = {
+            "images": [{"file": factory_bin, "offset": 0}],
+            "eraseFlash": True,
+        }
+
+    return doc
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(
@@ -346,6 +455,7 @@ def main() -> int:
 
     out_path = os.path.join(build_dir, "flash-manifest.json")
 
+    # Path 1: existing manifest — merge targetFamily when absent
     if os.path.isfile(out_path):
         with open(out_path, encoding="utf-8") as f:
             manifest = json.load(f)
@@ -366,35 +476,58 @@ def main() -> int:
             print(f"Keeping existing {out_path} (targetFamily already set)")
         return 0
 
-    mt_path = pick_mt_json(build_dir)
-    if not mt_path:
-        print("No *.mt.json; not emitting flash-manifest.json")
-        return 0
-
-    with open(mt_path, encoding="utf-8") as f:
-        mt = json.load(f)
-
     names = list_basenames(build_dir)
-    manifest_update = emit_meshtastic_update(build_dir, mt)
-    if not manifest_update:
-        print("Could not synthesize flash-manifest.json (update) from mt.json")
+
+    # Path 2: Meshtastic *.mt.json
+    mt_path = pick_mt_json(build_dir)
+    if mt_path:
+        with open(mt_path, encoding="utf-8") as f:
+            mt = json.load(f)
+
+        manifest_update = emit_meshtastic_update(build_dir, mt)
+        if not manifest_update:
+            print("Could not synthesize flash-manifest.json (update) from mt.json")
+            return 0
+
+        doc: dict = {"update": manifest_update}
+        factory = pick_factory_bin(names)
+        if factory:
+            manifest_full = emit_meshtastic_full(build_dir, mt, factory)
+            if manifest_full:
+                doc["factory"] = manifest_full
+            else:
+                print("Could not build factory section; omitting factory key", file=sys.stderr)
+        else:
+            print("No firmware-*.factory.bin in BUILD_DIR; omitting factory section")
+
+        merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
+        _write_manifest(out_path, merged_doc)
+        print(f"Wrote {out_path} (update + {'factory' if 'factory' in merged_doc else 'no factory'})")
         return 0
 
-    doc: dict = {"update": manifest_update}
-    factory = pick_factory_bin(names)
-    if factory:
-        manifest_full = emit_meshtastic_full(build_dir, mt, factory)
-        if manifest_full:
-            doc["factory"] = manifest_full
-        else:
-            print("Could not build factory section; omitting factory key", file=sys.stderr)
-    else:
-        print("No firmware-*.factory.bin in BUILD_DIR; omitting factory section")
+    # Path 3: generic nRF52 (UF2 output)
+    if pio_family == "nrf52":
+        doc = emit_generic_nrf52(names)
+        if doc:
+            merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
+            _write_manifest(out_path, merged_doc)
+            print(f"Wrote {out_path} (nRF52 UF2, update + {'factory' if 'factory' in merged_doc else 'no factory'})")
+            return 0
+        print("nRF52 target but no *.uf2 found in BUILD_DIR; skipping manifest", file=sys.stderr)
+        return 0
 
-    merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
-    _write_manifest(out_path, merged_doc)
-    print(f"Wrote {out_path} (update + {'factory' if 'factory' in merged_doc else 'no factory'})")
+    # Path 4: generic ESP32 (standard PlatformIO bin output)
+    if pio_family == "esp32":
+        doc = emit_generic_esp32(names)
+        if doc:
+            merged_doc = _merge_target_family_meta(doc, pio_family, pio_platform, pio_board)
+            _write_manifest(out_path, merged_doc)
+            print(f"Wrote {out_path} (ESP32 bins, update + {'factory' if 'factory' in merged_doc else 'no factory'})")
+            return 0
+        print("ESP32 target but could not detect bootloader+partitions+firmware in BUILD_DIR; skipping manifest", file=sys.stderr)
+        return 0
 
+    print(f"No manifest source found for family={pio_family!r}; skipping flash-manifest.json")
     return 0
 
 
