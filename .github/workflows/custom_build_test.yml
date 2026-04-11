@@ -35,7 +35,8 @@ jobs:
       CONVEX_URL: ${{ inputs.convex_url }}
       REPO_BUILD_ID: ${{ inputs.repo_build_id }}
       CONVEX_BUILD_TOKEN: ${{ secrets.CONVEX_BUILD_TOKEN }}
-      CI_PROGRESS_TOTAL: "5"
+      CI_PROGRESS_TOTAL: "10"
+      PLATFORMIO_LIBDEPS_DIR: ${{ github.workspace }}/.pio-libdeps/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.target_env }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,6 +83,13 @@ jobs:
           ENC_REF=$(python3 -c "import urllib.parse,os; print(urllib.parse.quote(os.environ['REF'], safe=''))")
           curl -fsSL -o /tmp/src.zip "https://codeload.github.com/${OWNER}/${REPO}/zip/${ENC_REF}"
 
+      - name: CI progress — restoring PlatformIO global cache
+        shell: bash
+        env:
+          STEP_INDEX: 4
+          LABEL: Restoring PlatformIO global cache (toolchains)
+        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+
       - name: Cache PlatformIO global store
         uses: actions/cache@v4
         with:
@@ -92,23 +100,59 @@ jobs:
           restore-keys: |
             platformio-${{ runner.os }}-v1-
 
-      - name: Extract and build
-        id: pio
+      - name: CI progress — restoring PlatformIO libdeps cache
+        shell: bash
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          STEP_INDEX: 5
+          LABEL: Restoring PlatformIO libdeps cache
+        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+
+      # Key is owner/repo/env only (not source SHA); bump …-v2 if lib_deps get out of sync.
+      - name: Cache PlatformIO libdeps (per repo + target)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.pio-libdeps/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.target_env }}
+          key: pio-libdeps-${{ inputs.owner }}-${{ inputs.repo }}-${{ inputs.target_env }}-v1
+
+      - name: Extract firmware source
         shell: bash
         run: |
-          STEP_INDEX=4 LABEL="Building firmware (PlatformIO)" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=6 LABEL="Extracting firmware source" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq unzip
+          rm -rf /tmp/src
+          mkdir -p /tmp/src
           unzip -q /tmp/src.zip -d /tmp/src
           ROOT=$(find /tmp/src -mindepth 1 -maxdepth 1 -type d | head -1)
+          printf '%s\n' "$ROOT" > /tmp/fw-src-root.txt
+          mkdir -p "$PLATFORMIO_LIBDEPS_DIR"
+
+      - name: Install PlatformIO
+        shell: bash
+        run: |
+          STEP_INDEX=7 LABEL="Installing PlatformIO" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          set -e
+          ROOT=$(cat /tmp/fw-src-root.txt)
           cd "$ROOT"
           python -m pip install -q --upgrade pip
           pip install -q platformio
+
+      - name: Install PlatformIO dependencies
+        shell: bash
+        run: |
+          STEP_INDEX=8 LABEL="Installing firmware dependencies (PlatformIO)" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          set -e
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          cd "$ROOT"
           pio pkg install -e "${{ inputs.target_env }}"
+
+      - name: Compile firmware (PlatformIO)
+        shell: bash
+        run: |
+          STEP_INDEX=9 LABEL="Compiling firmware (PlatformIO)" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          set -e
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          cd "$ROOT"
           MKLITTLEFS_BIN=$(find "$HOME/.platformio/packages" -type f -name mklittlefs 2>/dev/null | head -1)
           if [ -n "$MKLITTLEFS_BIN" ]; then
             export PATH="$(dirname "$MKLITTLEFS_BIN"):$PATH"
@@ -120,6 +164,20 @@ jobs:
             echo "Build output directory missing"
             exit 1
           fi
+
+      - name: Package and upload firmware bundle
+        id: pio
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        shell: bash
+        run: |
+          STEP_INDEX=10 LABEL="Packaging and uploading firmware bundle" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          set -e
+          ROOT=$(cat /tmp/fw-src-root.txt)
+          cd "$ROOT"
+          BUILD_DIR=".pio/build/${{ inputs.target_env }}"
           python3 "${{ github.workspace }}/scripts/emit-flash-manifest.py" "$ROOT/$BUILD_DIR" "$ROOT" "${{ inputs.target_env }}"
           ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
           STAGE=/tmp/fw-bundle
@@ -142,7 +200,7 @@ jobs:
           tar -czf "/tmp/$ARTIFACT_NAME" -C "$STAGE" .
           OBJECT_PATH="${R2_BUCKET_NAME}/${ARTIFACT_NAME}"
           bunx wrangler r2 object put "$OBJECT_PATH" --file "/tmp/$ARTIFACT_NAME" --remote
-          STEP_INDEX=5 LABEL="Firmware bundle uploaded" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=10 LABEL="Firmware bundle uploaded" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
           echo "r2_key=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Notify Convex — success
