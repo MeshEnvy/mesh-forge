@@ -196,12 +196,15 @@ jobs:
           BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
           MERGED="$BUILD_DIR/firmware-merged.factory.bin"
           PARTS="$BUILD_DIR/partitions.bin"
-          OTA_BIN=$(ls "$BUILD_DIR"/mt-*.ota.bin "$BUILD_DIR"/bleota-c3.bin 2>/dev/null | head -1)
+          OTA_BIN=""
+          for candidate in "$BUILD_DIR"/mt-*.ota.bin "$BUILD_DIR/bleota-c3.bin"; do
+            if [ -f "$candidate" ]; then OTA_BIN="$candidate"; break; fi
+          done
           if [ -f "$MERGED" ] && [ -f "$PARTS" ] && [ -n "$OTA_BIN" ]; then
             python3 "${{ github.workspace }}/scripts/extend-merged-with-ota.py" \
               "$MERGED" "$PARTS" "$OTA_BIN"
           else
-            echo "Skipping OTA extension (merged=$( [ -f "$MERGED" ] && echo yes || echo no), ota=$( [ -n "$OTA_BIN" ] && echo yes || echo no))"
+            echo "Skipping OTA extension (merged=$([ -f "$MERGED" ] && echo yes || echo no), ota=$([ -n "$OTA_BIN" ] && echo yes || echo no))"
           fi
 
       - name: Stage or generate nRF52 DFU files (if applicable)
