@@ -30,4 +30,4 @@
 	url = git@github.com:MeshEnvy/MeshCore-lotato.git
 [submodule "vendor/meshtastic-tinybbs"]
 	path = vendor/meshtastic-tinybbs
-	url = git@github.com:GoatsAndMonkeys/TinyBBS.git
+	url = git@github.com:MeshEnvy/TinyBBS.git
