@@ -1,0 +1,230 @@
+From 697b1317e012c74751ac995794b42bfbce967b14 Mon Sep 17 00:00:00 2001
+From: Ben Allfree <ben@benallfree.com>
+Date: Sun, 12 Apr 2026 12:04:17 -0700
+Subject: [PATCH] Add FS routing support for virtual mount points in FSCommon
+
+---
+ src/FSCommon.cpp | 94 ++++++++++++++++++++++++++++++++++++++++++++++++
+ src/FSCommon.h   | 42 +++++++++++++++++++++-
+ src/xmodem.cpp   |  9 +++--
+ src/xmodem.h     |  3 +-
+ 4 files changed, 141 insertions(+), 7 deletions(-)
+
+diff --git a/src/FSCommon.cpp b/src/FSCommon.cpp
+index 2c14f308c..79e927e64 100644
+--- a/src/FSCommon.cpp
++++ b/src/FSCommon.cpp
+@@ -324,6 +324,100 @@ void fsInit()
+ #endif
+ }
+ 
++// ── FSRoute virtual mount-point routing ──────────────────────────────────────
++
++#ifdef FSCom
++
++FSRoute fsRoute(const char *path)
++{
++    FSRoute r;
++    if (strncmp(path, "/__ext__/", 9) == 0) {
++        r.mount  = FsMount::External;
++        r.path[0] = '/';
++        strlcpy(r.path + 1, path + 9, sizeof(r.path) - 1);
++    } else if (strncmp(path, "/__int__/", 9) == 0) {
++        r.mount  = FsMount::Internal;
++        r.path[0] = '/';
++        strlcpy(r.path + 1, path + 9, sizeof(r.path) - 1);
++    } else if (strncmp(path, "/__sd__/", 8) == 0) {
++        r.mount  = FsMount::SD;
++        r.path[0] = '/';
++        strlcpy(r.path + 1, path + 8, sizeof(r.path) - 1);
++    } else {
++        r.mount = FsMount::Internal;
++        strlcpy(r.path, path, sizeof(r.path));
++    }
++    return r;
++}
++
++// ── FS selection helper ───────────────────────────────────────────────────────
++// Returns the correct FS object for the given mount, falling back to FSCom
++// when the requested mount is unavailable.
++
++#if defined(ARCH_NRF52)
++static Adafruit_LittleFS &_fsForMount(FsMount mount)
++{
++    if (mount == FsMount::External && extFS != nullptr)
++        return *extFS;
++    // SD: future
++    return (Adafruit_LittleFS &)FSCom;
++}
++#endif
++
++// ── Public helpers ────────────────────────────────────────────────────────────
++
++File fsOpenRead(const FSRoute &r)
++{
++#if defined(ARCH_NRF52)
++    return _fsForMount(r.mount).open(r.path, FILE_O_READ);
++#else
++    (void)r.mount;
++    return FSCom.open(r.path, FILE_O_READ);
++#endif
++}
++
++File fsOpenWrite(const FSRoute &r)
++{
++#if defined(ARCH_NRF52)
++    return _fsForMount(r.mount).open(r.path, FILE_O_WRITE);
++#else
++    (void)r.mount;
++    return FSCom.open(r.path, FILE_O_WRITE);
++#endif
++}
++
++bool fsRemove(const FSRoute &r)
++{
++#if defined(ARCH_NRF52)
++    return _fsForMount(r.mount).remove(r.path);
++#else
++    (void)r.mount;
++    return FSCom.remove(r.path);
++#endif
++}
++
++bool fsMkdir(const FSRoute &r)
++{
++#if defined(ARCH_NRF52)
++    return _fsForMount(r.mount).mkdir(r.path);
++#else
++    (void)r.mount;
++    return FSCom.mkdir(r.path);
++#endif
++}
++
++bool fsExists(const FSRoute &r)
++{
++#if defined(ARCH_NRF52)
++    return _fsForMount(r.mount).exists(r.path);
++#else
++    (void)r.mount;
++    return FSCom.exists(r.path);
++#endif
++}
++
++#endif // FSCom
++
+ /**
+  * Initializes the SD card and mounts the file system.
+  */
+diff --git a/src/FSCommon.h b/src/FSCommon.h
+index 9b3de20c2..1ac0d04a1 100644
+--- a/src/FSCommon.h
++++ b/src/FSCommon.h
+@@ -73,4 +73,44 @@ bool renameFile(const char *pathFrom, const char *pathTo);
+ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
+ void listDir(const char *dirname, uint8_t levels, bool del = false);
+ void rmDir(const char *dirname);
+-void setupSDCard();
+\ No newline at end of file
++void setupSDCard();
++
++#ifdef FSCom
++/**
++ * Virtual filesystem mount-point routing.
++ *
++ * Path-prefix convention (double-underscore delimiters avoid collisions):
++ *   /__int__/foo  →  internal flash  (InternalFS / LittleFS)
++ *   /__ext__/foo  →  external flash  (QSPI LittleFS if mounted, else internal)
++ *   /__sd__/foo   →  SD card         (if mounted, else internal)
++ *   /foo          →  internal flash  (bare paths passed through unchanged)
++ *
++ * This provides a lightweight mount-point convention without a full VFS.
++ * All consumers call fsRoute() + the helpers below; when Meshtastic gains a
++ * proper VFS layer these functions become the adapter to it.
++ */
++enum class FsMount { Internal, External, SD };
++
++struct FSRoute {
++    FsMount mount = FsMount::Internal;
++    char    path[128] = {};   // real path after prefix stripped
++};
++
++/** Resolve a path string to an FSRoute (mount + stripped path). */
++FSRoute fsRoute(const char *path);
++
++/** Open a file for reading on the routed filesystem. */
++File fsOpenRead(const FSRoute &r);
++
++/** Open a file for writing on the routed filesystem. */
++File fsOpenWrite(const FSRoute &r);
++
++/** Remove a file on the routed filesystem. Returns true on success. */
++bool fsRemove(const FSRoute &r);
++
++/** Create a directory (and parents) on the routed filesystem. */
++bool fsMkdir(const FSRoute &r);
++
++/** Return true if the path exists on the routed filesystem. */
++bool fsExists(const FSRoute &r);
++#endif // FSCom
+\ No newline at end of file
+diff --git a/src/xmodem.cpp b/src/xmodem.cpp
+index 1d8c77760..7c67d7fbf 100644
+--- a/src/xmodem.cpp
++++ b/src/xmodem.cpp
+@@ -120,10 +120,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
+             // NULL packet has the destination filename
+             memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
++            activeRoute_ = fsRoute(filename);
+ 
+             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+                 spiLock->lock();
+-                file = FSCom.open(filename, FILE_O_WRITE);
++                file = fsOpenWrite(activeRoute_);
+                 spiLock->unlock();
+                 if (file) {
+                     sendControl(meshtastic_XModem_Control_ACK);
+@@ -137,7 +138,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+             } else { // Transmit this file from Flash
+                 LOG_INFO("XModem: Transmit file %s", filename);
+                 spiLock->lock();
+-                file = FSCom.open(filename, FILE_O_READ);
++                file = fsOpenRead(activeRoute_);
+                 spiLock->unlock();
+                 if (file) {
+                     packetno = 1;
+@@ -200,8 +201,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+         spiLock->lock();
+         file.flush();
+         file.close();
+-
+-        FSCom.remove(filename);
++        fsRemove(activeRoute_);
+         spiLock->unlock();
+         isReceiving = false;
+         break;
+@@ -255,7 +255,6 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+             xmodemStore.seq = packetno;
+             spiLock->lock();
+             file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
+-
+             xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+             spiLock->unlock();
+             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+diff --git a/src/xmodem.h b/src/xmodem.h
+index 4cfcb43e1..48ff25fbb 100644
+--- a/src/xmodem.h
++++ b/src/xmodem.h
+@@ -67,7 +67,8 @@ class XModemAdapter
+     File file;
+ #endif
+ 
+-    char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
++    char     filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
++    FSRoute  activeRoute_; // resolved once at SOH, reused for DATA/EOT/CAN
+ 
+   protected:
+     meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
+-- 
+2.50.1
+
