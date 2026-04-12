@@ -22,3 +22,12 @@
 [submodule "vendor/meshcore-firmware"]
 	path = vendor/meshcore-firmware
 	url = git@github.com:MeshEnvy/MeshCore.git
+[submodule "vendor/meshtastic-baymesh"]
+	path = vendor/meshtastic-baymesh
+	url = git@github.com:RCGV1/firmware-Fork.git
+[submodule "vendor/meshcore-lotato"]
+	path = vendor/meshcore-lotato
+	url = git@github.com:MeshEnvy/MeshCore-lotato.git
+[submodule "vendor/meshtastic-tinybbs"]
+	path = vendor/meshtastic-tinybbs
+	url = git@github.com:GoatsAndMonkeys/TinyBBS.git
