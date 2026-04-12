@@ -232,10 +232,13 @@ jobs:
             [ -f "$BUILD_DIR/firmware/manifest.json" ] && cp -a "$BUILD_DIR/firmware/manifest.json" "$BUILD_DIR/"
           fi
 
-          # Path 3: firmware.bin present but still no .dat (Meshtastic UF2 builds, or MeshCore
-          # when the post-build script did not produce firmware.zip). Generate init packet.
-          if [ -f "$BUILD_DIR/firmware.bin" ] && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
-            echo "firmware.bin found but no .dat; generating DFU init packet"
+          # Path 3: firmware.bin present but still no .dat — nRF52 only.
+          # Guard against ESP32 builds which also produce firmware.bin; bootloader.bin is
+          # ESP32-specific and is never present in nRF52 build output.
+          if [ -f "$BUILD_DIR/firmware.bin" ] && \
+             ! [ -f "$BUILD_DIR/bootloader.bin" ] && \
+             ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
+            echo "firmware.bin found but no .dat (nRF52); generating DFU init packet"
             adafruit-nrfutil dfu genpkg \
               --dev-type 0xFFFF \
               --dev-revision 0xFFFF \
@@ -265,14 +268,19 @@ jobs:
           rm -rf "$STAGE"
           mkdir -p "$STAGE"
           shopt -s nullglob
-          for f in "$BUILD_DIR"/*.bin "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex "$BUILD_DIR"/*.dat; do
-            cp -a "$f" "$STAGE/"
-          done
-          shopt -u nullglob
-          # Nordic DFU manifest (MeshCore and other nRF52 builds)
-          if [ -f "$BUILD_DIR/manifest.json" ]; then
-            cp -a "$BUILD_DIR/manifest.json" "$STAGE/"
+          if ls "$BUILD_DIR"/firmware-*.factory.bin >/dev/null 2>&1; then
+            # ESP32: only the merged factory binary — sub-components are not needed
+            for f in "$BUILD_DIR"/firmware-*.factory.bin; do cp -a "$f" "$STAGE/"; done
+          else
+            # nRF52 / RP2040: firmware binary, DFU init packet, UF2 files
+            for f in "$BUILD_DIR"/firmware.bin "$BUILD_DIR"/firmware.dat \
+                     "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex; do
+              [ -f "$f" ] && cp -a "$f" "$STAGE/"
+            done
+            # Nordic DFU manifest (MeshCore and other nRF52 builds)
+            [ -f "$BUILD_DIR/manifest.json" ] && cp -a "$BUILD_DIR/manifest.json" "$STAGE/"
           fi
+          shopt -u nullglob
           bash "${{ github.workspace }}/scripts/stage-fw-bundle-docs.sh" "$ROOT" "$STAGE"
           if [ -z "$(find "$STAGE" -mindepth 1 -maxdepth 1 -type f -print -quit)" ]; then
             echo "No firmware artifacts found in $BUILD_DIR"
