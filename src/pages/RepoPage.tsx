@@ -74,14 +74,20 @@ export default function RepoPage() {
     if (sourceRef) return
     if (tagData === undefined || !tagData.row) return
     const tags = tagData.row.tags
-    if (tags.length === 0) return
-    const allSorted = sortTagNames(tags.map(t => t.name))
-    const cfg = tagData.row.meshforgeConfig as MeshforgeConfig | null | undefined
-    const candidates = cfg ? filterTagNames(allSorted, cfg) : allSorted
-    // Fall back to unfiltered list when the profile leaves nothing (e.g. no matching tags yet)
-    const latest = (candidates.length > 0 ? candidates : allSorted)[0]
-    if (!latest) return
-    navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+    if (tags.length > 0) {
+      const allSorted = sortTagNames(tags.map(t => t.name))
+      const cfg = tagData.row.meshforgeConfig as MeshforgeConfig | null | undefined
+      const candidates = cfg ? filterTagNames(allSorted, cfg) : allSorted
+      // Fall back to unfiltered list when the profile leaves nothing (e.g. no matching tags yet)
+      const latest = (candidates.length > 0 ? candidates : allSorted)[0]
+      if (!latest) return
+      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+    } else {
+      // No tags — redirect to the repo's default branch if known
+      const defaultBranch = (tagData.row as { defaultBranch?: string }).defaultBranch
+      if (!defaultBranch) return
+      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
+    }
   }, [owner, repo, sourceRef, tagData, navigate, ownerParam, repoParam])
 
   const [resolvedSha, setResolvedSha] = useState<string | null>(null)
@@ -194,12 +200,19 @@ export default function RepoPage() {
 
   const tagOptions = useMemo(() => {
     const tags = tagData?.row?.tags
-    if (!tags?.length) return []
-    const raw = tags.map(t => t.name)
-    const needExtra = sourceRef && !raw.some(n => n === sourceRef || n.toLowerCase() === sourceRef.toLowerCase())
-    const merged = needExtra ? [...raw, sourceRef] : [...raw]
-    return sortTagNames(merged)
-  }, [tagData?.row?.tags, sourceRef])
+    const defaultBranch = (tagData?.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
+    const raw = tags?.length ? tags.map(t => t.name) : []
+    const extra: string[] = []
+    // Include defaultBranch if not already a tag name
+    if (defaultBranch && !raw.some(n => n === defaultBranch || n.toLowerCase() === defaultBranch.toLowerCase())) {
+      extra.push(defaultBranch)
+    }
+    // Include sourceRef (current URL ref) if not already present
+    if (sourceRef && ![...raw, ...extra].some(n => n === sourceRef || n.toLowerCase() === sourceRef.toLowerCase())) {
+      extra.push(sourceRef)
+    }
+    return sortTagNames([...raw, ...extra])
+  }, [tagData?.row, sourceRef])
 
   // meshforgeConfig comes from the default branch (stored on the tag list, available before
   // a tag is selected so the tag dropdown itself can be filtered).
@@ -208,10 +221,16 @@ export default function RepoPage() {
     string,
     string[]
   > | null
-  const filteredTagOptions = useMemo(
-    () => filterTagNames(tagOptions, meshforgeConfig ?? {}),
-    [tagOptions, meshforgeConfig]
-  )
+  const filteredTagOptions = useMemo(() => {
+    const filtered = filterTagNames(tagOptions, meshforgeConfig ?? {})
+    // Always keep sourceRef and defaultBranch selectable even if the profile filter drops them
+    const defaultBranch = (tagData?.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
+    const reinjected = new Set(filtered.map(n => n.toLowerCase()))
+    const extras: string[] = []
+    if (sourceRef && !reinjected.has(sourceRef.toLowerCase())) extras.push(sourceRef)
+    if (defaultBranch && !reinjected.has(defaultBranch.toLowerCase())) extras.push(defaultBranch)
+    return extras.length > 0 ? sortTagNames([...filtered, ...extras]) : filtered
+  }, [tagOptions, meshforgeConfig, sourceRef, tagData?.row])
   const filteredEnvNames = useMemo(
     () => filterEnvNames(envNames, meshforgeConfig, envCapabilities ?? {}, tagDraft),
     [envNames, meshforgeConfig, envCapabilities, tagDraft]
@@ -380,17 +399,9 @@ export default function RepoPage() {
     )
   }
 
-  if (tagData.row.tags.length === 0) {
-    return (
-      <div className="max-w-xl mx-auto px-6 py-16 text-slate-300">
-        <p className="mb-4">
-          This repository has no tags. Mesh Forge needs at least one tag to pick a source revision.
-        </p>
-        <Button asChild variant="outline">
-          <Link to="/">Home</Link>
-        </Button>
-      </div>
-    )
+  // No tags and no explicit ref in URL — wait for redirect (useLayoutEffect will redirect to defaultBranch)
+  if (tagData.row.tags.length === 0 && !sourceRef) {
+    return <div className="min-h-[40vh] flex items-center justify-center text-slate-400">Opening repository…</div>
   }
 
   if (!sourceRef) {

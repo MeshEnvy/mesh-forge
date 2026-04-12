@@ -46,6 +46,7 @@ export const upsertFromGitHub = internalMutation({
     description: v.string(),
     homepage: v.string(),
     meshforgeConfig: v.optional(v.any()),
+    defaultBranch: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -62,6 +63,7 @@ export const upsertFromGitHub = internalMutation({
       description: args.description,
       homepage: args.homepage,
       meshforgeConfig: args.meshforgeConfig,
+      defaultBranch: args.defaultBranch,
     }
     if (existing) {
       await ctx.db.patch(existing._id, doc)
@@ -88,9 +90,11 @@ export const refresh = action({
     const repoJson = (await repoRes.json()) as {
       description: string | null
       homepage: string | null
+      default_branch: string | null
     }
     const description = (repoJson.description ?? "").trim()
     const homepage = (repoJson.homepage ?? "").trim()
+    const defaultBranch = (repoJson.default_branch ?? "").trim() || undefined
 
     // Fetch meshforge.yaml from the default branch (no ref = default branch).
     let meshforgeConfig: MeshforgeConfig | null = null
@@ -134,6 +138,7 @@ export const refresh = action({
       description,
       homepage,
       meshforgeConfig: meshforgeConfig ?? undefined,
+      defaultBranch,
     })
     return { ok: true as const, tagCount: tags.length }
   },

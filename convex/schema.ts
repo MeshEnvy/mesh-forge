@@ -20,6 +20,8 @@ export const repoTagListFields = {
   homepage: v.optional(v.string()),
   /** Parsed meshforge.yaml from the repo's default branch, if present. */
   meshforgeConfig: v.optional(v.any()),
+  /** GitHub's configured default branch (e.g. "main", "master"). Used as fallback when repo has no tags. */
+  defaultBranch: v.optional(v.string()),
 }
 
 export const repoRefScanFields = {
