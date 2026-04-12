@@ -8,21 +8,6 @@ function encodeTreePath(ref: string) {
   return ref.split("/").map(encodeURIComponent).join("/")
 }
 
-const DEMO_REPOS: { label: string; owner: string; repo: string; githubUrl: string }[] = [
-  {
-    label: "meshtastic/firmware",
-    owner: "meshtastic",
-    repo: "firmware",
-    githubUrl: "https://github.com/meshtastic/firmware",
-  },
-  {
-    label: "meshcore-dev/MeshCore",
-    owner: "meshcore-dev",
-    repo: "MeshCore",
-    githubUrl: "https://github.com/meshcore-dev/MeshCore",
-  },
-]
-
 export default function HomePage() {
   const navigate = useNavigate()
   const [input, setInput] = useState("")
@@ -77,34 +62,6 @@ export default function HomePage() {
           <Button className="w-full bg-cyan-600 hover:bg-cyan-700" type="button" onClick={go}>
             Open a firmware repo
           </Button>
-          <div className="pt-2 space-y-2">
-            <p className="text-xs text-slate-500 text-center">Try a demo</p>
-            <ul className="space-y-2">
-              {DEMO_REPOS.map(d => (
-                <li
-                  key={d.githubUrl}
-                  className="flex flex-col sm:flex-row gap-1 sm:gap-3 sm:items-center sm:justify-between rounded-lg border border-slate-800/80 bg-slate-900/40 px-3 py-2"
-                >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="text-slate-300 hover:text-cyan-400 text-sm justify-start h-auto py-1 px-0 font-normal"
-                    onClick={() => navigate(`/${encodeURIComponent(d.owner)}/${encodeURIComponent(d.repo)}`)}
-                  >
-                    Open {d.label}
-                  </Button>
-                  <a
-                    className="text-xs text-slate-600 hover:text-slate-400 sm:text-right shrink-0"
-                    href={d.githubUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {d.githubUrl.replace(/^https:\/\//, "")}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </div>
     </div>

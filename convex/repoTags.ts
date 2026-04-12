@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import { action, internalMutation, query } from "./_generated/server"
+import { parseMeshforgeYaml, type MeshforgeConfig } from "./lib/meshforgeYaml"
 import { sortTagEntries, type TagEntry } from "./lib/tagSemver"
 
 const TAG_TTL_MS = 120_000
@@ -44,6 +45,7 @@ export const upsertFromGitHub = internalMutation({
     etag: v.optional(v.string()),
     description: v.string(),
     homepage: v.string(),
+    meshforgeConfig: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -59,6 +61,7 @@ export const upsertFromGitHub = internalMutation({
       etag: args.etag,
       description: args.description,
       homepage: args.homepage,
+      meshforgeConfig: args.meshforgeConfig,
     }
     if (existing) {
       await ctx.db.patch(existing._id, doc)
@@ -89,6 +92,22 @@ export const refresh = action({
     const description = (repoJson.description ?? "").trim()
     const homepage = (repoJson.homepage ?? "").trim()
 
+    // Fetch meshforge.yaml from the default branch (no ref = default branch).
+    let meshforgeConfig: MeshforgeConfig | null = null
+    const yamlRes = await fetch(
+      `https://api.github.com/repos/${args.owner}/${args.repo}/contents/meshforge.yaml`,
+      { headers }
+    )
+    if (yamlRes.ok) {
+      try {
+        const yamlJson = (await yamlRes.json()) as { content?: string }
+        const raw = decodeBase64Utf8(yamlJson.content ?? "")
+        meshforgeConfig = parseMeshforgeYaml(raw)
+      } catch {
+        // ignore fetch/parse errors — profile is optional
+      }
+    }
+
     const rawTags: TagEntry[] = []
     let page = 1
     const perPage = 100
@@ -114,6 +133,7 @@ export const refresh = action({
       tags,
       description,
       homepage,
+      meshforgeConfig: meshforgeConfig ?? undefined,
     })
     return { ok: true as const, tagCount: tags.length }
   },

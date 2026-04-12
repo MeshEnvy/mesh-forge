@@ -7,17 +7,17 @@ export function parseIniSections(content: string): Record<string, Record<string,
   let current: string | null = null
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("#")) continue
+    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) continue
     const sec = trimmed.match(/^\[(.+)\]$/)
     if (sec) {
       current = sec[1]
       if (!sections[current]) sections[current] = {}
       continue
     }
-    if (current && trimmed.includes("=")) {
-      const [k, ...rest] = trimmed.split("=")
+    if (current && trimmed.includes('=')) {
+      const [k, ...rest] = trimmed.split('=')
       const key = k.trim()
-      const value = rest.join("=").trim()
+      const value = rest.join('=').trim()
       sections[current][key] = value
     }
   }
@@ -35,14 +35,14 @@ export function extractEnvNamesFromSections(sections: Record<string, Record<stri
 
 export type VirtualFileMap = Record<string, string>
 
-/** Strip first path segment (GitHub zip root folder). */
+/** Strip first path segment (GitHub zip root folder). Captures *.ini and meshforge.yaml. */
 export function normalizeZipPaths(files: Record<string, Uint8Array>, decode: (u: Uint8Array) => string): VirtualFileMap {
   const out: VirtualFileMap = {}
   for (const path of Object.keys(files)) {
-    const parts = path.split("/").filter(Boolean)
+    const parts = path.split('/').filter(Boolean)
     if (parts.length < 2) continue
-    const rel = parts.slice(1).join("/")
-    if (!rel.endsWith(".ini")) continue
+    const rel = parts.slice(1).join('/')
+    if (!rel.endsWith('.ini') && rel !== 'meshforge.yaml') continue
     try {
       out[rel] = decode(files[path])
     } catch {
@@ -52,14 +52,83 @@ export function normalizeZipPaths(files: Record<string, Uint8Array>, decode: (u:
   return out
 }
 
-export function collectPlatformioEnvsFromFiles(files: VirtualFileMap): { envNames: string[]; grouped: { flat: string[] } } {
-  const allEnvs = new Set<string>()
-  for (const content of Object.values(files)) {
-    const sections = parseIniSections(content)
-    for (const n of extractEnvNamesFromSections(sections)) {
-      allEnvs.add(n)
-    }
+/** Aggregate all PlatformIO sections from every .ini file in the virtual file map. */
+function aggregateIniSections(files: VirtualFileMap): Record<string, Record<string, string>> {
+  const allSections: Record<string, Record<string, string>> = {}
+  for (const [path, content] of Object.entries(files)) {
+    if (!path.endsWith('.ini')) continue
+    Object.assign(allSections, parseIniSections(content))
   }
-  const envNames = [...allEnvs].sort()
-  return { envNames, grouped: { flat: envNames } }
+  return allSections
+}
+
+/**
+ * Resolve the value of a given key for a PlatformIO section, following `extends` chains.
+ * Returns null when the key is not found or the chain is circular / broken.
+ */
+function resolveKey(
+  sectionName: string,
+  key: string,
+  allSections: Record<string, Record<string, string>>,
+  visited: Set<string> = new Set()
+): string | null {
+  if (visited.has(sectionName)) return null
+  visited.add(sectionName)
+  const sec = allSections[sectionName]
+  if (!sec) return null
+  if (sec[key] !== undefined) return sec[key]
+  const ext = sec['extends']
+  if (!ext) return null
+  for (const parent of ext.split(',').map(s => s.trim())) {
+    const val = resolveKey(parent, key, allSections, new Set(visited))
+    if (val !== null) return val
+  }
+  return null
+}
+
+/**
+ * Derive capability strings from a platform identifier and optional board name.
+ * - espressif32 (any variant, including pioarduino URLs) → wifi, ble
+ * - nordicnrf52 → ble
+ * - raspberrypi / platform-raspberrypi → wifi + ble only for boards ending in _w / picow
+ * - everything else → no capabilities assumed
+ */
+function capabilitiesFromPlatform(platform: string, board: string): string[] {
+  const p = platform.toLowerCase()
+  const b = board.toLowerCase()
+  if (p.includes('espressif32')) return ['wifi', 'ble']
+  if (p.includes('nordicnrf52')) return ['ble']
+  if (p.includes('raspberrypi') || p.includes('platform-raspberrypi')) {
+    if (b.includes('picow') || b.endsWith('_w')) return ['wifi', 'ble']
+  }
+  return []
+}
+
+/**
+ * Detect capabilities for each env by resolving `platform` and `board` through the
+ * full extends chain across all aggregated ini sections.
+ */
+export function detectEnvCapabilities(
+  envNames: string[],
+  allSections: Record<string, Record<string, string>>
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {}
+  for (const name of envNames) {
+    const sectionName = `env:${name}`
+    const platform = resolveKey(sectionName, 'platform', allSections) ?? ''
+    const board = resolveKey(sectionName, 'board', allSections) ?? ''
+    result[name] = capabilitiesFromPlatform(platform, board)
+  }
+  return result
+}
+
+export function collectPlatformioEnvsFromFiles(files: VirtualFileMap): {
+  envNames: string[]
+  grouped: { flat: string[] }
+  envCapabilities: Record<string, string[]>
+} {
+  const allSections = aggregateIniSections(files)
+  const envNames = extractEnvNamesFromSections(allSections)
+  const envCapabilities = detectEnvCapabilities(envNames, allSections)
+  return { envNames, grouped: { flat: envNames }, envCapabilities }
 }

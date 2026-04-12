@@ -14,6 +14,7 @@ import type * as auth from "../auth.js";
 import type * as deviceReports from "../deviceReports.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
+import type * as lib_meshforgeYaml from "../lib/meshforgeYaml.js";
 import type * as lib_platformioScan from "../lib/platformioScan.js";
 import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_tagSemver from "../lib/tagSemver.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   deviceReports: typeof deviceReports;
   helpers: typeof helpers;
   http: typeof http;
+  "lib/meshforgeYaml": typeof lib_meshforgeYaml;
   "lib/platformioScan": typeof lib_platformioScan;
   "lib/r2": typeof lib_r2;
   "lib/tagSemver": typeof lib_tagSemver;

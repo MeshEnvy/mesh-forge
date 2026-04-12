@@ -18,6 +18,8 @@ export const repoTagListFields = {
   description: v.optional(v.string()),
   /** GitHub REST `homepage` (often meshtastic.org–style URL). */
   homepage: v.optional(v.string()),
+  /** Parsed meshforge.yaml from the repo's default branch, if present. */
+  meshforgeConfig: v.optional(v.any()),
 }
 
 export const repoRefScanFields = {
@@ -27,6 +29,10 @@ export const repoRefScanFields = {
   scanStatus: v.union(v.literal("in_progress"), v.literal("complete"), v.literal("failed")),
   envNames: v.optional(v.array(v.string())),
   grouped: v.optional(v.any()),
+  /** Detected capability sets keyed by env name, e.g. { "LilyGo_TDeck_repeater": ["wifi","ble"] }. */
+  envCapabilities: v.optional(v.any()),
+  /** Parsed meshforge.yaml config from the scanned source tree, if present. */
+  meshforgeConfig: v.optional(v.any()),
   scanError: v.optional(v.string()),
   scannedAt: v.optional(v.number()),
   scanRunnerRequestId: v.optional(v.string()),

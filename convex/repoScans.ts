@@ -2,6 +2,7 @@ import { unzipSync, strFromU8 } from "fflate"
 import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
 import { collectPlatformioEnvsFromFiles, normalizeZipPaths } from "./lib/platformioScan"
+import { parseMeshforgeYaml } from "./lib/meshforgeYaml"
 import { action, internalMutation, mutation, query } from "./_generated/server"
 
 export const getByRepoSha = query({
@@ -57,7 +58,33 @@ export const ensureScan = mutation({
       .first()
 
     if (existing?.scanStatus === "complete") {
-      return { scanId: existing._id, status: "complete" as const }
+      const names = existing.envNames ?? []
+      const caps = existing.envCapabilities as Record<string, unknown> | undefined
+      const capsComplete =
+        caps != null &&
+        typeof caps === "object" &&
+        (names.length === 0 || names.every(n => Array.isArray(caps[n])))
+      if (capsComplete) {
+        return { scanId: existing._id, status: "complete" as const }
+      }
+      // Completed before envCapabilities existed (or partial write) — rescan same SHA.
+      await ctx.db.patch(existing._id, {
+        scanStatus: "in_progress",
+        envNames: undefined,
+        grouped: undefined,
+        envCapabilities: undefined,
+        meshforgeConfig: undefined,
+        scanError: undefined,
+        updatedAt: Date.now(),
+      })
+      await ctx.scheduler.runAfter(0, api.repoScans.runArchiveScan, {
+        scanId: existing._id,
+        owner: args.owner,
+        repo: args.repo,
+        ref: args.ref,
+        resolvedSourceSha: args.resolvedSourceSha,
+      })
+      return { scanId: existing._id, status: "in_progress" as const }
     }
     if (existing?.scanStatus === "in_progress") {
       return { scanId: existing._id, status: "in_progress" as const }
@@ -91,12 +118,16 @@ export const completeScanInternal = internalMutation({
     scanId: v.id("repoRefScan"),
     envNames: v.array(v.string()),
     grouped: v.any(),
+    envCapabilities: v.any(),
+    meshforgeConfig: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.scanId, {
       scanStatus: "complete",
       envNames: args.envNames,
       grouped: args.grouped,
+      envCapabilities: args.envCapabilities,
+      meshforgeConfig: args.meshforgeConfig,
       scannedAt: Date.now(),
       updatedAt: Date.now(),
       scanError: undefined,
@@ -143,11 +174,24 @@ export const runArchiveScan = action({
       }
       const files = unzipSync(buf)
       const virtual = normalizeZipPaths(files, u => strFromU8(u, true))
-      const { envNames, grouped } = collectPlatformioEnvsFromFiles(virtual)
+      const { envNames, grouped, envCapabilities } = collectPlatformioEnvsFromFiles(virtual)
+
+      let meshforgeConfig: ReturnType<typeof parseMeshforgeYaml> = null
+      const yamlContent = virtual['meshforge.yaml']
+      if (yamlContent) {
+        try {
+          meshforgeConfig = parseMeshforgeYaml(yamlContent)
+        } catch {
+          // ignore malformed yaml
+        }
+      }
+
       await ctx.runMutation(internal.repoScans.completeScanInternal, {
         scanId: args.scanId,
         envNames,
         grouped,
+        envCapabilities,
+        meshforgeConfig: meshforgeConfig ?? undefined,
       })
     } catch (e) {
       await ctx.runMutation(internal.repoScans.failScanInternal, {

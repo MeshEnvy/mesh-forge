@@ -23,6 +23,7 @@ import DeviceFlasher from "../components/DeviceFlasher"
 import { normalizeBuildKey } from "../lib/buildKey"
 import { buildFailurePresentation } from "../lib/formatBuildErrorSummary"
 import { homepageHref, homepageLabel } from "../lib/githubHomepage"
+import { filterEnvNames, filterTagNames, type MeshforgeConfig } from "../lib/meshforgeApplyProfile"
 import { resolveReadmeRelativeUrl } from "../lib/readmeAssetUrl"
 import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
 
@@ -74,8 +75,11 @@ export default function RepoPage() {
     if (tagData === undefined || !tagData.row) return
     const tags = tagData.row.tags
     if (tags.length === 0) return
-    const sorted = sortTagNames(tags.map(t => t.name))
-    const latest = sorted[0]
+    const allSorted = sortTagNames(tags.map(t => t.name))
+    const cfg = tagData.row.meshforgeConfig as MeshforgeConfig | null | undefined
+    const candidates = cfg ? filterTagNames(allSorted, cfg) : allSorted
+    // Fall back to unfiltered list when the profile leaves nothing (e.g. no matching tags yet)
+    const latest = (candidates.length > 0 ? candidates : allSorted)[0]
     if (!latest) return
     navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
   }, [owner, repo, sourceRef, tagData, navigate, ownerParam, repoParam])
@@ -170,8 +174,6 @@ export default function RepoPage() {
   )
 
   const envNames = scan?.scanStatus === "complete" ? (scan.envNames ?? []) : []
-  const resolvedTargetEnv =
-    hasRef && targetFromUrl && envNames.length > 0 && envNames.includes(targetFromUrl) ? targetFromUrl : ""
 
   const [tagDraft, setTagDraft] = useState("")
   useEffect(() => {
@@ -198,6 +200,27 @@ export default function RepoPage() {
     const merged = needExtra ? [...raw, sourceRef] : [...raw]
     return sortTagNames(merged)
   }, [tagData?.row?.tags, sourceRef])
+
+  // meshforgeConfig comes from the default branch (stored on the tag list, available before
+  // a tag is selected so the tag dropdown itself can be filtered).
+  const meshforgeConfig = (tagData?.row?.meshforgeConfig ?? null) as MeshforgeConfig | null
+  const envCapabilities = (scan?.scanStatus === "complete" ? scan.envCapabilities : null) as Record<
+    string,
+    string[]
+  > | null
+  const filteredTagOptions = useMemo(
+    () => filterTagNames(tagOptions, meshforgeConfig ?? {}),
+    [tagOptions, meshforgeConfig]
+  )
+  const filteredEnvNames = useMemo(
+    () => filterEnvNames(envNames, meshforgeConfig, envCapabilities ?? {}, tagDraft),
+    [envNames, meshforgeConfig, envCapabilities, tagDraft]
+  )
+
+  const resolvedTargetEnv =
+    hasRef && targetFromUrl && filteredEnvNames.length > 0 && filteredEnvNames.includes(targetFromUrl)
+      ? targetFromUrl
+      : ""
 
   const [envDraft, setEnvDraft] = useState("")
   useEffect(() => {
@@ -389,7 +412,7 @@ export default function RepoPage() {
     !resolvedSha ||
     Boolean(refError) ||
     !resolvedTargetEnv ||
-    !envNames.includes(resolvedTargetEnv) ||
+    !filteredEnvNames.includes(resolvedTargetEnv) ||
     !scanReady
 
   const showCiCard = build && (build.status !== "failed" || witnessedCiFailure)
@@ -402,8 +425,10 @@ export default function RepoPage() {
         ? "Scanning…"
         : scan.scanStatus === "failed"
           ? "Scan failed"
-          : envNames.length === 0
-            ? "No targets"
+          : filteredEnvNames.length === 0
+            ? envNames.length === 0
+              ? "No targets"
+              : "No targets match profile"
             : "--target--"
 
   const backToRepoPath = `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, resolvedTargetEnv || null)}`
@@ -619,7 +644,7 @@ export default function RepoPage() {
                   label="Tag"
                   layout="inline"
                   id="mesh-forge-tag"
-                  options={tagOptions}
+                  options={filteredTagOptions}
                   value={tagDraft}
                   placeholder="--tag--"
                   clearSelectionLabel="Clear tag"
@@ -629,18 +654,18 @@ export default function RepoPage() {
                       navigate(`/${ownerParam}/${repoParam}`)
                       return
                     }
-                    if (tagOptions.includes(v)) {
+                    if (filteredTagOptions.includes(v)) {
                       navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, targetFromUrl)}`)
                     }
                   }}
-                  disabled={tagOptions.length === 0}
+                  disabled={filteredTagOptions.length === 0}
                 />
-                {hasRef && scanReady && envNames.length > 0 ? (
+                {hasRef && scanReady && filteredEnvNames.length > 0 ? (
                   <ComboboxField
                     label="Target"
                     layout="inline"
                     id="mesh-forge-target"
-                    options={envNames}
+                    options={filteredEnvNames}
                     value={envDraft}
                     filterNormalize
                     placeholder="--target--"
@@ -654,7 +679,7 @@ export default function RepoPage() {
                         })
                         return
                       }
-                      if (envNames.includes(v)) {
+                      if (filteredEnvNames.includes(v)) {
                         navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, v)}`)
                       }
                     }}
