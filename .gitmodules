@@ -29,5 +29,5 @@
 	path = vendor/meshcore-lotato
 	url = git@github.com:MeshEnvy/MeshCore-lotato.git
 [submodule "vendor/meshtastic-tinybbs"]
-	path = vendor/meshtastic-tinybbs
+	path = vendor/TinyBBS
 	url = git@github.com:MeshEnvy/TinyBBS.git
