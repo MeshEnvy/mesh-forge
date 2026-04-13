@@ -31,3 +31,6 @@
 [submodule "vendor/TinyBBS"]
 	path = vendor/TinyBBS
 	url = git@github.com:MeshEnvy/TinyBBS.git
+[submodule "vendor/meshtastic-python"]
+	path = vendor/meshtastic-python
+	url = git@github.com:MeshEnvy/meshtastic-python.git

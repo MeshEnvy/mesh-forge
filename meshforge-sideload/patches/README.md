@@ -6,6 +6,19 @@ become unnecessary.
 
 ---
 
+## 00-xmodem-truncate-fix.patch
+
+**PR title:** `fix(xmodem): truncate file on open instead of appending`
+
+Standalone 2-line fix. `FILE_O_WRITE` on nRF52 (Adafruit LittleFS) appends to
+existing files rather than truncating. Removes the file before opening for write
+so repeated XModem uploads always produce the correct file size. Independent of
+the other two patches — can be reviewed and merged on its own.
+
+**Sentinel:** `Remove existing file first so we truncate`
+
+---
+
 ## 01-nrf-external-flash.patch
 
 **PR title:** `feat(nrf52): optional external QSPI LittleFS filesystem`

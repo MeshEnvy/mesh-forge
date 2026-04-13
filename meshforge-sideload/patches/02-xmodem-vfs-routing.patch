@@ -1,15 +1,3 @@
-From 697b1317e012c74751ac995794b42bfbce967b14 Mon Sep 17 00:00:00 2001
-From: Ben Allfree <ben@benallfree.com>
-Date: Sun, 12 Apr 2026 12:04:17 -0700
-Subject: [PATCH] Add FS routing support for virtual mount points in FSCommon
-
----
- src/FSCommon.cpp | 94 ++++++++++++++++++++++++++++++++++++++++++++++++
- src/FSCommon.h   | 42 +++++++++++++++++++++-
- src/xmodem.cpp   |  9 +++--
- src/xmodem.h     |  3 +-
- 4 files changed, 141 insertions(+), 7 deletions(-)
-
 diff --git a/src/FSCommon.cpp b/src/FSCommon.cpp
 index 2c14f308c..79e927e64 100644
 --- a/src/FSCommon.cpp
@@ -168,10 +156,10 @@ index 9b3de20c2..1ac0d04a1 100644
 +#endif // FSCom
 \ No newline at end of file
 diff --git a/src/xmodem.cpp b/src/xmodem.cpp
-index 1d8c77760..7c67d7fbf 100644
+index 1d8c77760..847fe49c8 100644
 --- a/src/xmodem.cpp
 +++ b/src/xmodem.cpp
-@@ -120,10 +120,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+@@ -120,10 +120,13 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
          if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
              // NULL packet has the destination filename
              memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
@@ -180,11 +168,13 @@ index 1d8c77760..7c67d7fbf 100644
              if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                  spiLock->lock();
 -                file = FSCom.open(filename, FILE_O_WRITE);
++                // Remove existing file first so we truncate rather than append
++                if (FSCom.exists(filename)) FSCom.remove(filename);
 +                file = fsOpenWrite(activeRoute_);
                  spiLock->unlock();
                  if (file) {
                      sendControl(meshtastic_XModem_Control_ACK);
-@@ -137,7 +138,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+@@ -137,7 +140,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
              } else { // Transmit this file from Flash
                  LOG_INFO("XModem: Transmit file %s", filename);
                  spiLock->lock();
@@ -193,7 +183,7 @@ index 1d8c77760..7c67d7fbf 100644
                  spiLock->unlock();
                  if (file) {
                      packetno = 1;
-@@ -200,8 +201,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+@@ -200,8 +203,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
          spiLock->lock();
          file.flush();
          file.close();
@@ -203,7 +193,7 @@ index 1d8c77760..7c67d7fbf 100644
          spiLock->unlock();
          isReceiving = false;
          break;
-@@ -255,7 +255,6 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
+@@ -255,7 +257,6 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
              xmodemStore.seq = packetno;
              spiLock->lock();
              file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
@@ -225,6 +215,3 @@ index 4cfcb43e1..48ff25fbb 100644
  
    protected:
      meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
--- 
-2.50.1
-

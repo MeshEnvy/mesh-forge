@@ -22,8 +22,9 @@ import subprocess
 import sys
 
 _PATCHES = [
-    ('01-nrf-external-flash.patch', 'extFSInit'),   # sentinel unique to patch 1
-    ('02-xmodem-vfs-routing.patch', 'fsRoute'),     # sentinel unique to patch 2
+    ('00-xmodem-truncate-fix.patch', 'Remove existing file first so we truncate'),  # standalone fix
+    ('01-nrf-external-flash.patch',  'extFSInit'),                                  # PR1: external flash FS
+    ('02-xmodem-vfs-routing.patch',  'fsRoute'),                                    # PR2: VFS routing + XModem
 ]
 
 _PATCH_DIR = os.path.dirname(os.path.abspath(__file__))
