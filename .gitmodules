@@ -34,3 +34,6 @@
 [submodule "vendor/meshtastic-python"]
 	path = vendor/meshtastic-python
 	url = git@github.com:MeshEnvy/meshtastic-python.git
+[submodule "vendor/meshtastic-web"]
+	path = vendor/meshtastic-web
+	url = git@github.com:meshtastic/web.git
