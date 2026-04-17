@@ -75,9 +75,14 @@
 }
 
 .prose.prose-invert a {
-  color: oklch(0.488 0.243 264.376);
+  color: oklch(0.82 0.12 195);
   font-weight: 500;
   text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.prose.prose-invert a:hover {
+  color: oklch(0.88 0.1 195);
 }
 
 .prose.prose-invert code {

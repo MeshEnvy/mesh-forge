@@ -728,7 +728,7 @@ export default function RepoPage() {
               <div>
                 <p className="text-xs text-slate-500 mb-1">{owner}</p>
                 <h3 className="flex flex-wrap items-center gap-1.5 text-xl font-bold text-white leading-tight">
-                  <a className="hover:text-cyan-400" href={ghRepoRoot} target="_blank" rel="noreferrer">
+                  <a className="text-white hover:text-cyan-400" href={ghRepoRoot} target="_blank" rel="noreferrer">
                     {repo}
                   </a>
                   {!ghAboutHomepage ? (

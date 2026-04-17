@@ -1,4 +1,5 @@
 import logo from "@/assets/logo.png"
+import { FeaturedProjects } from "@/components/FeaturedProjects"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -13,8 +14,10 @@ export default function HomePage() {
   const [input, setInput] = useState("")
   const [error, setError] = useState<string | null>(null)
 
-  const go = () => {
-    const parsed = parseGithubUrl(input)
+  const openRepoUrl = (raw: string) => {
+    const trimmed = raw.trim()
+    setInput(trimmed)
+    const parsed = parseGithubUrl(trimmed)
     if (!parsed) {
       setError("Paste a GitHub URL like https://github.com/owner/repo or owner/repo")
       return
@@ -30,8 +33,10 @@ export default function HomePage() {
     }
   }
 
+  const go = () => openRepoUrl(input)
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col items-center justify-center px-6 py-16">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col items-center justify-start px-6 py-12 md:py-16">
       <div className="max-w-xl w-full text-center space-y-8">
         <div className="space-y-5">
           <div className="flex justify-center">
@@ -48,6 +53,8 @@ export default function HomePage() {
             </p>
           </div>
         </div>
+
+        <FeaturedProjects onOpenRepoUrl={openRepoUrl} />
 
         <div className="space-y-3 text-left">
           <input

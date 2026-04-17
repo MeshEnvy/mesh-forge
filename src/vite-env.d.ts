@@ -1,6 +1,11 @@
 /// <reference types="vite/client" />
 
-declare module '*.md?raw' {
+declare module "*.md?raw" {
   const src: string
   export default src
+}
+
+declare module "*.yaml" {
+  const data: unknown
+  export default data
 }
