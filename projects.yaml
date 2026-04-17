@@ -4,11 +4,11 @@ projects:
     url: https://github.com/MeshEnvy/MeshCore-lotato
     highlighted: false
     logo: https://avatars.githubusercontent.com/u/237130814?v=4&s=128
-  - title: Mesh64
-    subtitle: A 64-hop Meshtastic prototype by Baymesh.
-    url: https://github.com/RCGV1/firmware-Fork/tree/baymesh-refactor
-    highlighted: true
-    logo: https://avatars.githubusercontent.com/u/119711889?v=4&s=128
+  # - title: Mesh64
+  #   subtitle: A 64-hop Meshtastic prototype by Baymesh.
+  #   url: https://github.com/RCGV1/firmware-Fork/tree/baymesh-refactor
+  #   highlighted: true
+  #   logo: https://avatars.githubusercontent.com/u/119711889?v=4&s=128
   - title: MeshCore
     subtitle: Open mesh stack and device firmware for LoRa-class radios—companion nodes, repeaters, and app-friendly transports.
     url: https://github.com/meshcore-dev/MeshCore
