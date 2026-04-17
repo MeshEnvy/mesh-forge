@@ -3,6 +3,8 @@ import { FeaturedProjects } from "@/components/FeaturedProjects"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+
+const MESH_FORGE_README_URL = "https://github.com/MeshEnvy/mesh-forge#readme"
 import { parseGithubUrl } from "../lib/parseGithubUrl"
 
 function encodeTreePath(ref: string) {
@@ -66,9 +68,20 @@ export default function HomePage() {
             onKeyDown={e => e.key === "Enter" && go()}
           />
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <Button className="w-full bg-cyan-600 hover:bg-cyan-700" type="button" onClick={go}>
-            Open a firmware repo
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button className="w-full bg-cyan-600 hover:bg-cyan-700" type="button" onClick={go}>
+              Open a firmware repo
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="w-full border-slate-600 text-slate-200 hover:border-slate-500 hover:bg-slate-800 hover:text-white"
+            >
+              <a href={MESH_FORGE_README_URL} target="_blank" rel="noreferrer">
+                Read the docs
+              </a>
+            </Button>
+          </div>
         </div>
       </div>
     </div>
