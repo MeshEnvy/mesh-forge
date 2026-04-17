@@ -13,14 +13,25 @@ interface DiscordButtonProps {
   variant?: "default" | "outline" | "ghost" | "link" | "destructive"
   size?: "default" | "sm" | "lg" | "icon"
   className?: string
+  /** Icon only; link gets `aria-label` for accessibility */
+  iconOnly?: boolean
 }
 
-export function DiscordButton({ variant = "outline", size, className }: DiscordButtonProps) {
+export function DiscordButton({ variant = "outline", size, className, iconOnly }: DiscordButtonProps) {
   return (
-    <a href="https://discord.gg/8KgJpvjfaJ" target="_blank" rel="noopener noreferrer">
-      <Button variant={variant} size={size} className={cn("flex items-center gap-2", className)}>
-        <DiscordIcon className="w-4 h-4" />
-        Discord
+    <a
+      href="https://discord.gg/8KgJpvjfaJ"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={iconOnly ? "MeshForge on Discord" : undefined}
+    >
+      <Button
+        variant={variant}
+        size={iconOnly ? "icon" : size}
+        className={cn(iconOnly ? "shrink-0" : "flex items-center gap-2", className)}
+      >
+        <DiscordIcon className={iconOnly ? "h-[18px] w-[18px]" : "w-4 h-4"} />
+        {!iconOnly ? "Discord" : null}
       </Button>
     </a>
   )

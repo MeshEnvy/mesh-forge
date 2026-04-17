@@ -37,3 +37,6 @@
 [submodule "vendor/meshtastic-web"]
 	path = vendor/meshtastic-web
 	url = git@github.com:meshtastic/web.git
+[submodule "vendor/lobbs-meshtastic-firmware"]
+	path = vendor/lobbs-meshtastic-firmware
+	url = git@github.com:benallfree/lobbs-meshtstic-firmware.git

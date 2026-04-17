@@ -1,5 +1,6 @@
 import Footer from "@/components/Footer"
 import Navbar from "@/components/Navbar"
+import { SocialCornerBadges } from "@/components/SocialCornerBadges"
 import { Navigate, Route, Routes, useLocation } from "react-router-dom"
 import AdminPage from "./pages/AdminPage"
 import HomePage from "./pages/HomePage"
@@ -14,6 +15,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const hideNav = loc.pathname === "/"
   return (
     <div className="min-h-screen flex flex-col">
+      <SocialCornerBadges />
       {!hideNav && <Navbar />}
       <main className="flex-1">{children}</main>
       <Footer />

@@ -1,14 +1,12 @@
 import favicon from "@/assets/favicon-96x96.png"
-import { DiscordButton } from "@/components/DiscordButton"
-import { RedditButton } from "@/components/RedditButton"
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
 import { useAuthActions } from "@convex-dev/auth/react"
-import { Authenticated, Unauthenticated, useQuery } from "convex/react"
+import { Authenticated, useQuery } from "convex/react"
 import { Link } from "react-router-dom"
 
 export default function Navbar() {
-  const { signOut, signIn } = useAuthActions()
+  const { signOut } = useAuthActions()
   const isAdmin = useQuery(api.admin.isAdmin)
 
   return (
@@ -33,22 +31,6 @@ export default function Navbar() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <DiscordButton
-              variant="default"
-              className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 shadow-lg shadow-purple-500/50"
-            />
-            <RedditButton
-              variant="default"
-              className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white border-0 shadow-lg shadow-orange-500/50"
-            />
-            <Unauthenticated>
-              <Button
-                onClick={() => signIn("github", { redirectTo: window.location.href })}
-                className="bg-cyan-600 hover:bg-cyan-700"
-              >
-                Sign In
-              </Button>
-            </Unauthenticated>
             <Authenticated>
               <Button variant="outline" onClick={() => signOut()}>
                 Sign Out

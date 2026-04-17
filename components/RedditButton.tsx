@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useId } from "react"
 
-function RedditIcon(props: React.SVGProps<SVGSVGElement>) {
+function RedditIcon(props: React.SVGProps<SVGSVGElement> & { maskId: string }) {
+  const { maskId, ...rest } = props
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <mask id="SVGfUZuVbjp">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" {...rest}>
+      <mask id={maskId}>
         <g fill="#fff">
           <path
             fillOpacity="0"
@@ -72,7 +74,7 @@ function RedditIcon(props: React.SVGProps<SVGSVGElement>) {
           <animate fill="freeze" attributeName="stroke-dashoffset" begin="2s" dur="0.2s" values="10;0" />
         </path>
       </mask>
-      <rect width="24" height="24" fill="currentColor" mask="url(#SVGfUZuVbjp)" />
+      <rect width="24" height="24" fill="currentColor" mask={`url(#${maskId})`} />
     </svg>
   )
 }
@@ -81,14 +83,25 @@ interface RedditButtonProps {
   variant?: "default" | "outline" | "ghost" | "link" | "destructive"
   size?: "default" | "sm" | "lg" | "icon"
   className?: string
+  iconOnly?: boolean
 }
 
-export function RedditButton({ variant = "outline", size, className }: RedditButtonProps) {
+export function RedditButton({ variant = "outline", size, className, iconOnly }: RedditButtonProps) {
+  const maskId = useId().replace(/:/g, "")
   return (
-    <a href="https://www.reddit.com/r/MeshForge/" target="_blank" rel="noopener noreferrer">
-      <Button variant={variant} size={size} className={cn("flex items-center gap-2", className)}>
-        <RedditIcon className="w-4 h-4" />
-        Reddit
+    <a
+      href="https://www.reddit.com/r/MeshForge/"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={iconOnly ? "r/MeshForge on Reddit" : undefined}
+    >
+      <Button
+        variant={variant}
+        size={iconOnly ? "icon" : size}
+        className={cn(iconOnly ? "shrink-0" : "flex items-center gap-2", className)}
+      >
+        <RedditIcon maskId={maskId} className={iconOnly ? "h-[18px] w-[18px]" : "w-4 h-4"} />
+        {!iconOnly ? "Reddit" : null}
       </Button>
     </a>
   )
