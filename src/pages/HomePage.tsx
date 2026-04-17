@@ -3,9 +3,9 @@ import { FeaturedProjects } from "@/components/FeaturedProjects"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { parseGithubUrl } from "../lib/parseGithubUrl"
 
 const MESH_FORGE_README_URL = "https://github.com/MeshEnvy/mesh-forge#readme"
-import { parseGithubUrl } from "../lib/parseGithubUrl"
 
 function encodeTreePath(ref: string) {
   return ref.split("/").map(encodeURIComponent).join("/")
@@ -43,12 +43,12 @@ export default function HomePage() {
         <div className="space-y-5">
           <div className="flex justify-center">
             <div className="rounded-2xl bg-slate-100 p-4 md:p-5 shadow-lg shadow-black/25 ring-1 ring-white/10">
-              <img src={logo} alt="Mesh Forge" className="h-20 w-auto md:h-24" width={120} height={120} />
+              <img src={logo} alt="MeshForge" className="h-20 w-auto md:h-24" width={120} height={120} />
             </div>
           </div>
           <div>
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
-              Mesh Forge
+              MeshForge
             </h1>
             <p className="mt-3 text-slate-200 text-lg md:text-xl font-medium leading-snug">
               An open ecosystem and web flasher for mesh plugins, extensions, and firmware.

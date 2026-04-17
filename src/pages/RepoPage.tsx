@@ -479,119 +479,114 @@ export default function RepoPage() {
         />
       ) : showCiInner ? (
         <>
-              {build.status === "failed" ? (
-                <div className="flex flex-wrap gap-2 items-center">
-                  {build.githubRunId ? (
-                    <a
-                      className="text-cyan-400 hover:underline text-xs"
-                      href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
-                      target="_blank"
-                      rel="noreferrer"
+          {build.status === "failed" ? (
+            <div className="flex flex-wrap gap-2 items-center">
+              {build.githubRunId ? (
+                <a
+                  className="text-cyan-400 hover:underline text-xs"
+                  href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View run on GitHub
+                </a>
+              ) : (
+                <a
+                  className="text-cyan-400 hover:underline text-xs"
+                  href={meshForgeWorkflowUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the MeshForge workflow to fix YAML or inspect recent runs."
+                >
+                  MeshForge workflow on GitHub
+                </a>
+              )}
+            </div>
+          ) : null}
+          {buildInProgress ? (
+            <div className="space-y-2 pt-1">
+              {(() => {
+                const step = build.ciProgressStep
+                const total = build.ciProgressTotal
+                const label = build.ciProgressLabel
+                const hasSteps =
+                  typeof step === "number" && typeof total === "number" && total > 0 && step >= 1 && step <= total
+                const pct = hasSteps ? Math.min(100, Math.round((step / total) * 100)) : null
+                return (
+                  <>
+                    <div
+                      className={`relative h-2.5 w-full overflow-hidden rounded-full bg-slate-800/90 ${
+                        pct === null ? "animate-pulse" : ""
+                      }`}
                     >
-                      View run on GitHub
-                    </a>
-                  ) : (
-                    <a
-                      className="text-cyan-400 hover:underline text-xs"
-                      href={meshForgeWorkflowUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="No run ID — usually the workflow never started (e.g. dispatch rejected). Open the Mesh Forge workflow to fix YAML or inspect recent runs."
-                    >
-                      Mesh Forge workflow on GitHub
-                    </a>
-                  )}
-                </div>
-              ) : null}
-              {buildInProgress ? (
-                <div className="space-y-2 pt-1">
-                  {(() => {
-                    const step = build.ciProgressStep
-                    const total = build.ciProgressTotal
-                    const label = build.ciProgressLabel
-                    const hasSteps =
-                      typeof step === "number" && typeof total === "number" && total > 0 && step >= 1 && step <= total
-                    const pct = hasSteps ? Math.min(100, Math.round((step / total) * 100)) : null
-                    return (
-                      <>
+                      {pct !== null ? (
                         <div
-                          className={`relative h-2.5 w-full overflow-hidden rounded-full bg-slate-800/90 ${
-                            pct === null ? "animate-pulse" : ""
-                          }`}
-                        >
-                          {pct !== null ? (
-                            <div
-                              className="ci-progress-fill-throb h-full rounded-full transition-[width] duration-500 ease-out"
-                              style={{ width: `${pct}%` }}
-                            />
-                          ) : (
-                            <div className="ci-progress-shimmer-x top-0 h-full w-[42%] rounded-full bg-linear-to-r from-cyan-700/85 via-emerald-400/95 to-cyan-700/85 shadow-[0_0_10px_rgba(52,211,153,0.4)]" />
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-400">
-                          {hasSteps ? (
-                            <>
-                              Step {step} of {total}
-                              {label ? ` · ${label}` : ""}
-                            </>
-                          ) : (
-                            <>Waiting for CI progress…</>
-                          )}
-                        </p>
-                        {build.githubRunId ? (
-                          <a
-                            className="inline-block text-cyan-400 hover:underline text-xs pt-0.5"
-                            href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View run on GitHub
-                          </a>
-                        ) : null}
-                      </>
-                    )
-                  })()}
-                </div>
-              ) : null}
-              {build.status === "failed" && build.errorSummary ? (
-                <div className="space-y-2 text-xs">
-                  {(() => {
-                    const { headline, body } = buildFailurePresentation(build.errorSummary)
-                    return (
-                      <>
-                        <p className="font-medium text-slate-200">{headline}</p>
-                        {body ? <p className="text-slate-400 leading-relaxed">{body}</p> : null}
-                        <details className="text-slate-500">
-                          <summary className="cursor-pointer select-none hover:text-slate-400">Technical details</summary>
-                          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
-                            {build.errorSummary.length > 2500
-                              ? `…${build.errorSummary.slice(-2500)}`
-                              : build.errorSummary}
-                          </pre>
-                        </details>
-                      </>
-                    )
-                  })()}
-                </div>
-              ) : null}
-              {build.status === "succeeded" && !flashUrl ? (
-                <>
-                  {flashPrep === "loading" ? (
-                    <p className="text-sm text-slate-400">Preparing USB flasher…</p>
-                  ) : null}
-                  {flashPrep === "error" ? (
-                    <p className="text-sm text-amber-200/90">
-                      Could not load a signed URL for flashing. Use <strong>Download bundle</strong> if you need the
-                      file.
+                          className="ci-progress-fill-throb h-full rounded-full transition-[width] duration-500 ease-out"
+                          style={{ width: `${pct}%` }}
+                        />
+                      ) : (
+                        <div className="ci-progress-shimmer-x top-0 h-full w-[42%] rounded-full bg-linear-to-r from-cyan-700/85 via-emerald-400/95 to-cyan-700/85 shadow-[0_0_10px_rgba(52,211,153,0.4)]" />
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {hasSteps ? (
+                        <>
+                          Step {step} of {total}
+                          {label ? ` · ${label}` : ""}
+                        </>
+                      ) : (
+                        <>Waiting for CI progress…</>
+                      )}
                     </p>
-                  ) : null}
-                  {flashPrep !== "loading" && flashPrep !== "error" ? (
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void download()}>
-                      Download bundle
-                    </Button>
-                  ) : null}
-                </>
+                    {build.githubRunId ? (
+                      <a
+                        className="inline-block text-cyan-400 hover:underline text-xs pt-0.5"
+                        href={`https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/runs/${build.githubRunId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View run on GitHub
+                      </a>
+                    ) : null}
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
+          {build.status === "failed" && build.errorSummary ? (
+            <div className="space-y-2 text-xs">
+              {(() => {
+                const { headline, body } = buildFailurePresentation(build.errorSummary)
+                return (
+                  <>
+                    <p className="font-medium text-slate-200">{headline}</p>
+                    {body ? <p className="text-slate-400 leading-relaxed">{body}</p> : null}
+                    <details className="text-slate-500">
+                      <summary className="cursor-pointer select-none hover:text-slate-400">Technical details</summary>
+                      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px] text-red-300/90">
+                        {build.errorSummary.length > 2500 ? `…${build.errorSummary.slice(-2500)}` : build.errorSummary}
+                      </pre>
+                    </details>
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
+          {build.status === "succeeded" && !flashUrl ? (
+            <>
+              {flashPrep === "loading" ? <p className="text-sm text-slate-400">Preparing USB flasher…</p> : null}
+              {flashPrep === "error" ? (
+                <p className="text-sm text-amber-200/90">
+                  Could not load a signed URL for flashing. Use <strong>Download bundle</strong> if you need the file.
+                </p>
               ) : null}
+              {flashPrep !== "loading" && flashPrep !== "error" ? (
+                <Button type="button" size="sm" variant="secondary" onClick={() => void download()}>
+                  Download bundle
+                </Button>
+              ) : null}
+            </>
+          ) : null}
         </>
       ) : null}
     </div>
@@ -604,9 +599,7 @@ export default function RepoPage() {
           <div className="min-w-0 space-y-6 md:space-y-8">
             <header className="space-y-5 border-b border-slate-800/90 pb-8">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-500/90">
-                  Web Flasher
-                </p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-500/90">Web Flasher</p>
                 <Link
                   to={backToRepoPath}
                   className="text-sm text-cyan-400 hover:text-cyan-300 hover:underline underline-offset-4 shrink-0"
@@ -631,9 +624,7 @@ export default function RepoPage() {
                     <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500 shrink-0 w-30">
                       Target
                     </dt>
-                    <dd className="font-mono text-amber-200/95 min-w-0 wrap-break-word">
-                      {resolvedTargetEnv ?? "—"}
-                    </dd>
+                    <dd className="font-mono text-amber-200/95 min-w-0 wrap-break-word">{resolvedTargetEnv ?? "—"}</dd>
                   </div>
                 </dl>
               </div>
@@ -713,11 +704,11 @@ export default function RepoPage() {
                 <Button
                   type="button"
                   className="h-9 shrink-0 bg-amber-600 px-4 text-white hover:bg-amber-700"
-                disabled={flashPrimaryDisabled}
-                onClick={queueFlashArtifacts}
-              >
-                Flash
-              </Button>
+                  disabled={flashPrimaryDisabled}
+                  onClick={queueFlashArtifacts}
+                >
+                  Flash
+                </Button>
               </div>
 
               {statusStripEl}

@@ -9,7 +9,7 @@ import webAppIcon512Url from "@/assets/web-app-manifest-512x512.png?url"
 const headMarker = "link[data-mesh-forge-head]"
 
 function appendLink(attrs: Record<string, string>) {
-  const el = document.createElement('link')
+  const el = document.createElement("link")
   el.setAttribute("data-mesh-forge-head", "")
   for (const [k, v] of Object.entries(attrs)) {
     el.setAttribute(k, v)
@@ -21,15 +21,15 @@ function appendLink(attrs: Record<string, string>) {
 export function bootstrapAppHead() {
   if (document.head.querySelector(headMarker)) return
 
-  appendLink({ rel: 'icon', type: 'image/png', href: favicon96x96Url, sizes: '96x96' })
-  appendLink({ rel: 'icon', type: 'image/svg+xml', href: faviconSvgUrl })
-  appendLink({ rel: 'shortcut icon', href: faviconIcoUrl })
-  appendLink({ rel: 'apple-touch-icon', sizes: '180x180', href: appleTouchIconUrl })
-  appendLink({ rel: 'icon', href: logoUrl })
+  appendLink({ rel: "icon", type: "image/png", href: favicon96x96Url, sizes: "96x96" })
+  appendLink({ rel: "icon", type: "image/svg+xml", href: faviconSvgUrl })
+  appendLink({ rel: "shortcut icon", href: faviconIcoUrl })
+  appendLink({ rel: "apple-touch-icon", sizes: "180x180", href: appleTouchIconUrl })
+  appendLink({ rel: "icon", href: logoUrl })
 
   const manifest = {
-    name: "Mesh Forge",
-    short_name: "Mesh Forge",
+    name: "MeshForge",
+    short_name: "MeshForge",
     icons: [
       {
         src: webAppIcon192Url,
@@ -50,5 +50,5 @@ export function bootstrapAppHead() {
   }
   const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" })
   const manifestUrl = URL.createObjectURL(blob)
-  appendLink({ rel: 'manifest', href: manifestUrl })
+  appendLink({ rel: "manifest", href: manifestUrl })
 }

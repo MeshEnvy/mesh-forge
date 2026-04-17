@@ -22,8 +22,8 @@ import {
   runEspFlash,
   type FlashPhase,
 } from "../lib/espFlashRun"
-import { runNrfFlash } from "../lib/nrfFlashRun"
 import { inferTargetFamilyFromBundle, inferTargetFamilyFromEnv } from "../lib/flashTargetFamily"
+import { runNrfFlash } from "../lib/nrfFlashRun"
 import type { FlashTargetFamily } from "../lib/untarGz"
 import { extractTarGz } from "../lib/untarGz"
 
@@ -58,7 +58,7 @@ type DeviceFlasherProps = {
   className?: string
   /** Firmware source repo tree at this ref (no target / flash path segment). */
   githubRepoTreeHref?: string | null
-  /** Mesh Forge GitHub Actions run for this build. */
+  /** MeshForge GitHub Actions run for this build. */
   githubActionsRunHref?: string | null
   /** Download firmware bundle (icon button below controls). */
   onDownloadBundle?: (() => void) | null
@@ -84,9 +84,7 @@ export default function DeviceFlasher({
   const [busy, setBusy] = useState(false)
   const shareDialogRef = useRef<HTMLDialogElement>(null)
   const [eraseFlashForFactory, setEraseFlashForFactory] = useState(false)
-  const [bundleFamily, setBundleFamily] = useState<FlashTargetFamily>(
-    inferTargetFamilyFromEnv(targetEnv) ?? "esp32"
-  )
+  const [bundleFamily, setBundleFamily] = useState<FlashTargetFamily>(inferTargetFamilyFromEnv(targetEnv) ?? "esp32")
   const [bundleCanErase, setBundleCanErase] = useState(false)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
   const [bundleLoadError, setBundleLoadError] = useState<string | null>(null)
@@ -245,7 +243,7 @@ export default function DeviceFlasher({
     try {
       await navigator.share({
         url: shareUrlTrimmed,
-        title: "Mesh Forge Web Flasher",
+        title: "MeshForge Web Flasher",
       })
       closeShareDialog()
     } catch (e) {
@@ -406,7 +404,7 @@ export default function DeviceFlasher({
                         <div className="min-w-0 space-y-1">
                           <h2 className="text-lg font-semibold tracking-tight text-slate-50">Share Web Flasher</h2>
                           <p className="text-sm leading-relaxed text-slate-400">
-                            Same firmware view in Mesh Forge — repo, ref, target, and bundle.
+                            Same firmware view in MeshForge — repo, ref, target, and bundle.
                           </p>
                         </div>
                       </div>
@@ -440,7 +438,9 @@ export default function DeviceFlasher({
                         ) : null}
                       </div>
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Open or post</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Open or post
+                        </p>
                         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                           <Button
                             type="button"
@@ -457,7 +457,7 @@ export default function DeviceFlasher({
                             <span className="truncate">New tab</span>
                           </Button>
                           <a
-                            href={`mailto:?subject=${encodeURIComponent("Mesh Forge Web Flasher")}&body=${encodeURIComponent(shareUrlTrimmed)}`}
+                            href={`mailto:?subject=${encodeURIComponent("MeshForge Web Flasher")}&body=${encodeURIComponent(shareUrlTrimmed)}`}
                             title="Email this link"
                             className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-600 bg-slate-900/40 px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
                             onClick={closeShareDialog}
@@ -466,7 +466,7 @@ export default function DeviceFlasher({
                             <span className="truncate">Email</span>
                           </a>
                           <a
-                            href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrlTrimmed)}&text=${encodeURIComponent("Mesh Forge Web Flasher")}`}
+                            href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrlTrimmed)}&text=${encodeURIComponent("MeshForge Web Flasher")}`}
                             target="_blank"
                             rel="noreferrer"
                             title="Post on X"
@@ -486,7 +486,10 @@ export default function DeviceFlasher({
                             className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-600 bg-slate-900/40 px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
                             onClick={closeShareDialog}
                           >
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]" aria-hidden />
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]"
+                              aria-hidden
+                            />
                             <span className="truncate">Bluesky</span>
                           </a>
                         </div>

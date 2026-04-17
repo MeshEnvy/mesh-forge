@@ -1,5 +1,5 @@
 /**
- * Mesh Forge tree URLs: `/owner/repo/tree/<tag-or-ref segments>/target/<env>` with optional `/flash` for the flasher-only view.
+ * MeshForge tree URLs: `/owner/repo/tree/<tag-or-ref segments>/target/<env>` with optional `/flash` for the flasher-only view.
  * Source ref may contain `/` (nested tags are rare but allowed). `target` is a reserved final segment pair.
  */
 const TARGET_TAIL = /\/target\/([^/]+)$/

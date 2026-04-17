@@ -29,7 +29,7 @@ function FeaturedTile({ project, onOpenRepoUrl }: { project: FeaturedProject; on
     <button
       type="button"
       onClick={() => onOpenRepoUrl(project.url)}
-      aria-label={`Open ${project.title} in Mesh Forge`}
+      aria-label={`Open ${project.title} in MeshForge`}
       className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-700/80 bg-slate-900/60 p-3 text-left ring-1 ring-white/5 transition hover:border-cyan-700/60 hover:bg-slate-800/80 hover:ring-cyan-500/20"
     >
       <FeaturedAvatar src={project.logo} title={project.title} />

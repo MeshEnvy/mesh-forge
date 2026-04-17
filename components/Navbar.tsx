@@ -17,9 +17,9 @@ export default function Navbar() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <img src={favicon} alt="Mesh Forge logo" className="h-10 w-10 rounded-lg" />
+              <img src={favicon} alt="MeshForge logo" className="h-10 w-10 rounded-lg" />
               <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
-                Mesh Forge
+                MeshForge
               </span>
             </Link>
             <div className="flex items-center gap-4">
