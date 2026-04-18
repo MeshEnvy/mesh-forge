@@ -22,7 +22,7 @@ import { ComboboxField } from "../components/ComboboxField"
 import DeviceFlasher from "../components/DeviceFlasher"
 import { normalizeBuildKey } from "../lib/buildKey"
 import { buildFailurePresentation } from "../lib/formatBuildErrorSummary"
-import { homepageHref, homepageLabel } from "../lib/githubHomepage"
+import { homepageHref } from "../lib/githubHomepage"
 import { filterEnvNames, filterTagNames, type MeshforgeConfig } from "../lib/meshforgeApplyProfile"
 import { resolveReadmeRelativeUrl } from "../lib/readmeAssetUrl"
 import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
@@ -750,7 +750,6 @@ export default function RepoPage() {
                     rel="noreferrer"
                   >
                     <Link2 className="size-3.5 shrink-0 text-slate-400" aria-hidden />
-                    {homepageLabel(ghAboutHomepage)}
                   </a>
                   <a
                     className="inline-flex rounded p-0.5 text-slate-500 hover:text-white"
