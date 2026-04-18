@@ -40,3 +40,9 @@
 [submodule "vendor/lobbs-meshtastic-firmware"]
 	path = vendor/lobbs-meshtastic-firmware
 	url = git@github.com:benallfree/lobbs-meshtstic-firmware.git
+[submodule "vendor/microReticulum"]
+	path = vendor/microReticulum
+	url = git@github.com:Reticulum-Community/microReticulum.git
+[submodule "vendor/microReticulum-Firmware"]
+	path = vendor/microReticulum-Firmware
+	url = git@github.com:Reticulum-Community/microReticulum_Firmware.git
