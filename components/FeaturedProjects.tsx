@@ -36,10 +36,10 @@ function FeaturedTile({ project, onOpenRepoUrl }: { project: FeaturedProject; on
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold text-white group-hover:text-cyan-100">{project.title}</span>
-          {project.highlighted ? (
+          {project.new ? (
             <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-500/30">
               <Check className="h-3 w-3" aria-hidden />
-              pick
+              new
             </span>
           ) : null}
         </div>

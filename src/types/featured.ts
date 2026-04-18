@@ -2,7 +2,7 @@ export type FeaturedProject = {
   title: string
   subtitle?: string
   url: string
-  highlighted?: boolean
+  new?: boolean
   logo: string
 }
 

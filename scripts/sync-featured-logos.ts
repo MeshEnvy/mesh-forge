@@ -13,7 +13,7 @@ type Row = {
   url: string
   logo?: string
   subtitle?: string
-  highlighted?: boolean
+  new?: boolean
 }
 
 const text = readFileSync(yamlPath, "utf8")
