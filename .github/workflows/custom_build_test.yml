@@ -53,7 +53,7 @@ jobs:
         env:
           STEP_INDEX: 1
           LABEL: Build started on Actions
-        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+        run: python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,7 +70,7 @@ jobs:
         env:
           STEP_INDEX: 2
           LABEL: Runner tooling ready
-        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+        run: python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
 
       - name: Download source archive
         shell: bash
@@ -79,7 +79,7 @@ jobs:
           REPO: ${{ inputs.repo }}
           REF: ${{ inputs.ref }}
         run: |
-          STEP_INDEX=3 LABEL="Downloading source archive" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=3 LABEL="Downloading source archive" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           ENC_REF=$(python3 -c "import urllib.parse,os; print(urllib.parse.quote(os.environ['REF'], safe=''))")
           curl -fsSL -o /tmp/src.zip "https://codeload.github.com/${OWNER}/${REPO}/zip/${ENC_REF}"
 
@@ -88,7 +88,7 @@ jobs:
         env:
           STEP_INDEX: 4
           LABEL: Restoring PlatformIO global cache (toolchains)
-        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+        run: python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
 
       - name: Cache PlatformIO global store
         uses: actions/cache@v4
@@ -105,7 +105,7 @@ jobs:
         env:
           STEP_INDEX: 5
           LABEL: Restoring PlatformIO libdeps cache
-        run: python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+        run: python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
 
       # Key is owner/repo/env only (not source SHA); bump …-v2 if lib_deps get out of sync.
       - name: Cache PlatformIO libdeps (per repo + target)
@@ -117,7 +117,7 @@ jobs:
       - name: Extract firmware source
         shell: bash
         run: |
-          STEP_INDEX=6 LABEL="Extracting firmware source" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=6 LABEL="Extracting firmware source" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq unzip
           rm -rf /tmp/src
@@ -130,7 +130,7 @@ jobs:
       - name: Install PlatformIO
         shell: bash
         run: |
-          STEP_INDEX=7 LABEL="Installing PlatformIO" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=7 LABEL="Installing PlatformIO" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           set -e
           ROOT=$(cat /tmp/fw-src-root.txt)
           cd "$ROOT"
@@ -140,7 +140,7 @@ jobs:
       - name: Install PlatformIO dependencies
         shell: bash
         run: |
-          STEP_INDEX=8 LABEL="Installing firmware dependencies (PlatformIO)" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=8 LABEL="Installing firmware dependencies (PlatformIO)" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           set -e
           ROOT=$(cat /tmp/fw-src-root.txt)
           cd "$ROOT"
@@ -149,7 +149,7 @@ jobs:
       - name: Compile firmware (PlatformIO)
         shell: bash
         run: |
-          STEP_INDEX=9 LABEL="Compiling firmware (PlatformIO)" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=9 LABEL="Compiling firmware (PlatformIO)" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           set -e
           ROOT=$(cat /tmp/fw-src-root.txt)
           cd "$ROOT"
@@ -165,87 +165,6 @@ jobs:
             exit 1
           fi
 
-      - name: Generate merged factory binary for ESP32 targets (if applicable)
-        shell: bash
-        run: |
-          ROOT=$(cat /tmp/fw-src-root.txt)
-          BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
-          if [ -f "$BUILD_DIR/bootloader.bin" ]; then
-            echo "ESP32 target detected; running mergebin → firmware-merged.factory.bin"
-            cd "$ROOT"
-            export MERGED_BIN_PATH="$BUILD_DIR/firmware-merged.factory.bin"
-            pio run -t mergebin -e "${{ inputs.target_env }}" 2>&1 || \
-              echo "WARNING: mergebin target failed; factory binary will not be available"
-          else
-            echo "No bootloader.bin found; skipping mergebin (non-ESP32 target)"
-          fi
-
-      - name: Download Meshtastic ESP OTA companion (if applicable)
-        shell: bash
-        run: |
-          set -e
-          ROOT=$(cat /tmp/fw-src-root.txt)
-          cd "$ROOT"
-          BUILD_DIR=".pio/build/${{ inputs.target_env }}"
-          bash "${{ github.workspace }}/scripts/download-meshtastic-ota.sh" "$ROOT/$BUILD_DIR"
-
-      - name: Extend merged binary with Meshtastic OTA companion (if applicable)
-        shell: bash
-        run: |
-          ROOT=$(cat /tmp/fw-src-root.txt)
-          BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
-          MERGED="$BUILD_DIR/firmware-merged.factory.bin"
-          PARTS="$BUILD_DIR/partitions.bin"
-          OTA_BIN=""
-          for candidate in "$BUILD_DIR"/mt-*.ota.bin "$BUILD_DIR/bleota-c3.bin"; do
-            if [ -f "$candidate" ]; then OTA_BIN="$candidate"; break; fi
-          done
-          if [ -f "$MERGED" ] && [ -f "$PARTS" ] && [ -n "$OTA_BIN" ]; then
-            python3 "${{ github.workspace }}/scripts/extend-merged-with-ota.py" \
-              "$MERGED" "$PARTS" "$OTA_BIN"
-          else
-            echo "Skipping OTA extension (merged=$([ -f "$MERGED" ] && echo yes || echo no), ota=$([ -n "$OTA_BIN" ] && echo yes || echo no))"
-          fi
-
-      - name: Stage or generate nRF52 DFU files (if applicable)
-        shell: bash
-        run: |
-          set -e
-          ROOT=$(cat /tmp/fw-src-root.txt)
-          BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
-
-          # Path 1: unpack any DFU-shaped *.zip from the PIO build dir, normalize to firmware.bin/dat.
-          bash "${{ github.workspace }}/scripts/stage-nrf52-dfu-from-build.sh" "$BUILD_DIR"
-
-          # Path 2: firmware/ subdirectory fallback (local builds or alternate PIO layouts).
-          if [ -d "$BUILD_DIR/firmware" ] && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
-            echo "Found firmware/ subdirectory; staging nRF52 DFU files to build root"
-            shopt -s nullglob
-            for f in "$BUILD_DIR/firmware/"*.bin "$BUILD_DIR/firmware/"*.dat; do
-              cp -a "$f" "$BUILD_DIR/"
-            done
-            shopt -u nullglob
-            [ -f "$BUILD_DIR/firmware/manifest.json" ] && cp -a "$BUILD_DIR/firmware/manifest.json" "$BUILD_DIR/"
-          fi
-
-          # Path 3: firmware.bin present but still no .dat — nRF52 only.
-          # Guard against ESP32 builds which also produce firmware.bin; bootloader.bin is
-          # ESP32-specific and is never present in nRF52 build output.
-          if [ -f "$BUILD_DIR/firmware.bin" ] && \
-             ! [ -f "$BUILD_DIR/bootloader.bin" ] && \
-             ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
-            echo "firmware.bin found but no .dat (nRF52); generating DFU init packet"
-            adafruit-nrfutil dfu genpkg \
-              --dev-type 0xFFFF \
-              --dev-revision 0xFFFF \
-              --application-version 0xFFFFFFFF \
-              --sd-req 0xFFFE \
-              --application "$BUILD_DIR/firmware.bin" \
-              /tmp/nrf52-dfu.zip
-            unzip -j /tmp/nrf52-dfu.zip "*.dat" -d "$BUILD_DIR/"
-            echo "DFU init packet written: $(ls "$BUILD_DIR"/*.dat 2>/dev/null || echo '(none)')"
-          fi
-
       - name: Package and upload firmware bundle
         id: pio
         env:
@@ -254,38 +173,15 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         shell: bash
         run: |
-          STEP_INDEX=10 LABEL="Packaging and uploading firmware bundle" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=10 LABEL="Packaging and uploading firmware bundle" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           set -e
           ROOT=$(cat /tmp/fw-src-root.txt)
-          cd "$ROOT"
-          BUILD_DIR=".pio/build/${{ inputs.target_env }}"
+          BUILD_DIR_ABS="$ROOT/.pio/build/${{ inputs.target_env }}"
           ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
-          STAGE=/tmp/fw-bundle
-          rm -rf "$STAGE"
-          mkdir -p "$STAGE"
-          shopt -s nullglob
-          if ls "$BUILD_DIR"/firmware-*.factory.bin >/dev/null 2>&1; then
-            # ESP32: only the merged factory binary — sub-components are not needed
-            for f in "$BUILD_DIR"/firmware-*.factory.bin; do cp -a "$f" "$STAGE/"; done
-          else
-            # nRF52 / RP2040: firmware binary, DFU init packet, UF2 files
-            for f in "$BUILD_DIR"/firmware.bin "$BUILD_DIR"/firmware.dat \
-                     "$BUILD_DIR"/*.uf2 "$BUILD_DIR"/*.hex; do
-              [ -f "$f" ] && cp -a "$f" "$STAGE/"
-            done
-            # Nordic DFU manifest (MeshCore and other nRF52 builds)
-            [ -f "$BUILD_DIR/manifest.json" ] && cp -a "$BUILD_DIR/manifest.json" "$STAGE/"
-          fi
-          shopt -u nullglob
-          bash "${{ github.workspace }}/scripts/stage-fw-bundle-docs.sh" "$ROOT" "$STAGE"
-          if [ -z "$(find "$STAGE" -mindepth 1 -maxdepth 1 -type f -print -quit)" ]; then
-            echo "No firmware artifacts found in $BUILD_DIR"
-            exit 1
-          fi
-          tar -czf "/tmp/$ARTIFACT_NAME" -C "$STAGE" .
+          MESHTASTIC_OTA=1 bash "${{ github.workspace }}/scripts/ci/common/fw-bundle-pipeline.sh" "$ROOT" "$BUILD_DIR_ABS" "/tmp/$ARTIFACT_NAME"
           OBJECT_PATH="${R2_BUCKET_NAME}/${ARTIFACT_NAME}"
           bunx wrangler r2 object put "$OBJECT_PATH" --file "/tmp/$ARTIFACT_NAME" --remote
-          STEP_INDEX=10 LABEL="Firmware bundle uploaded" python3 "${{ github.workspace }}/scripts/report-convex-ci-progress.py"
+          STEP_INDEX=10 LABEL="Firmware bundle uploaded" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           echo "r2_key=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Notify Convex — success

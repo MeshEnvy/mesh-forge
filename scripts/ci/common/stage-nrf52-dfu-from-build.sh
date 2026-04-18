@@ -10,8 +10,8 @@ set -euo pipefail
 BUILD_DIR="${1:?usage: stage-nrf52-dfu-from-build.sh BUILD_DIR}"
 
 zip_looks_like_dfu() {
-  # Heuristic: DFU package includes a .dat init packet (member path ends in .dat).
-  unzip -l "$1" 2>/dev/null | grep -qE '[.]dat$'
+  # Heuristic: DFU package includes a .dat init packet (allow trailing spaces on listing lines).
+  unzip -l "$1" 2>/dev/null | grep -qE '[.]dat[[:space:]]*$'
 }
 
 normalize_pair() {
@@ -76,4 +76,40 @@ else
       normalize_pair "${base}.bin" "$(basename "$dat")"
     fi
   fi
+fi
+
+# Standalone application .bin (no DFU zip / no package): map largest eligible .bin to
+# firmware.bin so CI genpkg and bundle steps can run. Skip ESP32 and UF2-first layouts.
+if [ -f "$BUILD_DIR/bootloader.bin" ]; then
+  exit 0
+fi
+if [ -f "$BUILD_DIR/firmware.bin" ]; then
+  exit 0
+fi
+if ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
+  exit 0
+fi
+shopt -s nullglob
+uf2s=( "$BUILD_DIR"/*.uf2 )
+bins=( "$BUILD_DIR"/*.bin )
+shopt -u nullglob
+if [ "${#uf2s[@]}" -gt 0 ]; then
+  exit 0
+fi
+if [ "${#bins[@]}" -eq 0 ]; then
+  exit 0
+fi
+best=""
+bestz=-1
+for f in "${bins[@]}"; do
+  [ -f "$f" ] || continue
+  z=$(wc -c <"$f" | tr -d ' ')
+  if [ "$z" -gt "$bestz" ]; then
+    bestz=$z
+    best=$f
+  fi
+done
+if [ -n "$best" ]; then
+  echo "Promoting standalone application .bin -> firmware.bin: $(basename "$best")"
+  cp -a "$best" "$BUILD_DIR/firmware.bin"
 fi
