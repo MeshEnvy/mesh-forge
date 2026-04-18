@@ -214,12 +214,8 @@ jobs:
           ROOT=$(cat /tmp/fw-src-root.txt)
           BUILD_DIR="$ROOT/.pio/build/${{ inputs.target_env }}"
 
-          # Path 1: MeshCore produces firmware.zip (Nordic DFU package) when adafruit-nrfutil
-          # is available during pio run. Unzip it to get bin/dat/manifest.json at build root.
-          if [ -f "$BUILD_DIR/firmware.zip" ]; then
-            echo "Found firmware.zip; extracting Nordic DFU files to build root"
-            unzip -j "$BUILD_DIR/firmware.zip" "*.bin" "*.dat" "manifest.json" -d "$BUILD_DIR/" || true
-          fi
+          # Path 1: unpack any DFU-shaped *.zip from the PIO build dir, normalize to firmware.bin/dat.
+          bash "${{ github.workspace }}/scripts/stage-nrf52-dfu-from-build.sh" "$BUILD_DIR"
 
           # Path 2: firmware/ subdirectory fallback (local builds or alternate PIO layouts).
           if [ -d "$BUILD_DIR/firmware" ] && ! ls "$BUILD_DIR"/*.dat >/dev/null 2>&1; then
