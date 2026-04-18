@@ -10,8 +10,6 @@
     "url": "https://github.com/MeshEnvy/mesh-forge.git"
   },
   "scripts": {
-    "generate:versions": "node scripts/generate-versions.js && biome format src/constants/versions.ts  --write",
-    "generate:architecture": "node scripts/generate-architecture-hierarchy.js",
     "sync:featured": "bun scripts/sync-featured-logos.ts",
     "dev": "vite",
     "build": "vite build",
