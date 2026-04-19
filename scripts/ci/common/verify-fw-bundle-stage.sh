@@ -11,6 +11,41 @@ set -euo pipefail
 
 BUILD_DIR=${1:?usage: verify-fw-bundle-stage.sh BUILD_DIR STAGE_DIR_OR_TARBALL}
 ARTIFACT=${2:?usage: verify-fw-bundle-stage.sh BUILD_DIR STAGE_DIR_OR_TARBALL}
+VERIFY_ARTIFACT_PATH="$ARTIFACT"
+
+fail_verify() {
+  echo "$1" >&2
+  fw_bundle_verify_print_diagnostics
+  exit 1
+}
+
+fw_bundle_verify_print_diagnostics() {
+  echo "" >&2
+  echo "========== Firmware bundle verification diagnostics ==========" >&2
+  if [ -f "${VERIFY_ARTIFACT_PATH:-}" ]; then
+    case "${VERIFY_ARTIFACT_PATH}" in
+      *.tar.gz|*.tgz)
+        echo "--- Tarball member list: ${VERIFY_ARTIFACT_PATH} ---" >&2
+        tar -tzf "${VERIFY_ARTIFACT_PATH}" 2>&1 >&2 || echo "(failed to list tarball)" >&2
+        ;;
+    esac
+  fi
+  if [ -d "$BUILD_DIR" ]; then
+    echo "--- Build output directory listing: $BUILD_DIR ---" >&2
+    ls -la "$BUILD_DIR" 2>&1 >&2 || echo "(ls build dir failed)" >&2
+    echo "--- Firmware-related files under build dir (max depth 3, capped) ---" >&2
+    find "$BUILD_DIR" -maxdepth 3 -type f \( \
+      -name '*.bin' -o -name '*.uf2' -o -name '*.hex' -o -name '*.elf' -o -name '*.json' -o -name '*.mt.json' \
+      \) -print 2>/dev/null | head -200 >&2 || true
+  else
+    echo "--- BUILD_DIR not a directory: $BUILD_DIR ---" >&2
+  fi
+  if [ -n "${STAGE_DIR:-}" ] && [ -d "$STAGE_DIR" ]; then
+    echo "--- Staged / extracted tree (all files) ---" >&2
+    find "$STAGE_DIR" -type f -print 2>/dev/null | sort >&2 || true
+  fi
+  echo "========== End diagnostics ==========" >&2
+}
 
 if [ ! -d "$BUILD_DIR" ]; then
   echo "BUILD_DIR is not a directory: $BUILD_DIR" >&2
@@ -27,18 +62,15 @@ if [ -f "$ARTIFACT" ]; then
   case "$ARTIFACT" in
     *.tar.gz|*.tgz) ;;
     *)
-      echo "When second arg is a file, it must be .tar.gz or .tgz: $ARTIFACT" >&2
-      exit 1
+      fail_verify "When second arg is a file, it must be .tar.gz or .tgz: $ARTIFACT"
       ;;
   esac
   if ! tar -tzf "$ARTIFACT" >/dev/null 2>&1; then
-    echo "Not a readable gzip tarball: $ARTIFACT" >&2
-    exit 1
+    fail_verify "Not a readable gzip tarball: $ARTIFACT"
   fi
   arch_bytes=$(wc -c <"$ARTIFACT" | tr -d ' ')
   if [ "$arch_bytes" -lt 2048 ]; then
-    echo "Tarball file too small ($arch_bytes bytes), likely corrupt or empty: $ARTIFACT" >&2
-    exit 1
+    fail_verify "Tarball file too small ($arch_bytes bytes), likely corrupt or empty: $ARTIFACT"
   fi
   EXTRACT=$(mktemp -d "${TMPDIR:-/tmp}/fw-bundle-verify.XXXXXX")
   tar -xzf "$ARTIFACT" -C "$EXTRACT"
@@ -46,16 +78,21 @@ if [ -f "$ARTIFACT" ]; then
   echo "Verifying tarball ($(basename "$ARTIFACT"), $arch_bytes bytes) -> extracted under $STAGE_DIR"
   members=$(tar -tzf "$ARTIFACT" | grep -c . || true)
   if [ "${members:-0}" -lt 1 ]; then
-    echo "Tarball lists zero members: $ARTIFACT" >&2
-    exit 1
+    fail_verify "Tarball lists zero members: $ARTIFACT"
   fi
 elif [ -d "$ARTIFACT" ]; then
   STAGE_DIR="$ARTIFACT"
   echo "Verifying staged directory: $STAGE_DIR"
 else
-  echo "Second arg must be a stage directory or a .tar.gz/.tgz file: $ARTIFACT" >&2
-  exit 1
+  fail_verify "Second arg must be a stage directory or a .tar.gz/.tgz file: $ARTIFACT"
 fi
+
+# Any flashable-looking payload (docs-only tarballs must fail before bundle-class rules).
+_flashable=$(find "$STAGE_DIR" -type f \( -name '*.bin' -o -name '*.uf2' -o -name '*.hex' \) 2>/dev/null | head -1 || true)
+if [ -z "$_flashable" ]; then
+  fail_verify "Bundle has no flashable files (.bin, .uf2, or .hex) — likely docs-only or empty."
+fi
+unset _flashable
 
 bytes() {
   wc -c <"$1" | tr -d ' '
@@ -120,14 +157,11 @@ if [ -f "$BUILD_DIR/bootloader.bin" ]; then
   echo "Bundle class: ESP32 (bootloader.bin in build tree)"
   best=$(largest_staged_bin)
   if [ -z "$best" ]; then
-    echo "ESP32 bundle: no *.bin under archive/stage (R2 tarball would be unusable for flash)" >&2
-    ls -la "$STAGE_DIR" >&2
-    exit 1
+    fail_verify "ESP32 bundle: no *.bin at archive root (R2 tarball would be unusable for flash)"
   fi
   z=$(bytes "$best")
   if [ "$z" -lt "$MIN_ESP32_BIN" ]; then
-    echo "ESP32 bundle: largest .bin too small ($z bytes < $MIN_ESP32_BIN): $best" >&2
-    exit 1
+    fail_verify "ESP32 bundle: largest .bin too small ($z bytes < $MIN_ESP32_BIN): $best"
   fi
   echo "ESP32 bundle OK: primary image $(basename "$best") size=$z bytes"
   exit 0
@@ -139,21 +173,17 @@ if [ -f "$STAGE_DIR/firmware.bin" ] && [ -f "$STAGE_DIR/firmware.dat" ]; then
   zb=$(bytes "$STAGE_DIR/firmware.bin")
   zd=$(bytes "$STAGE_DIR/firmware.dat")
   if [ "$zb" -lt "$MIN_NRF52_APP" ]; then
-    echo "nRF52 bundle: firmware.bin too small ($zb < $MIN_NRF52_APP)" >&2
-    exit 1
+    fail_verify "nRF52 bundle: firmware.bin too small ($zb < $MIN_NRF52_APP)"
   fi
   if [ "$zd" -lt "$MIN_NRF52_DAT" ]; then
-    echo "nRF52 bundle: firmware.dat too small ($zd < $MIN_NRF52_DAT)" >&2
-    exit 1
+    fail_verify "nRF52 bundle: firmware.dat too small ($zd < $MIN_NRF52_DAT)"
   fi
   if [ ! -f "$STAGE_DIR/manifest.json" ]; then
-    echo "nRF52 bundle: missing manifest.json" >&2
-    exit 1
+    fail_verify "nRF52 bundle: missing manifest.json"
   fi
   zm=$(bytes "$STAGE_DIR/manifest.json")
   if [ "$zm" -lt "$MIN_MANIFEST" ]; then
-    echo "nRF52 bundle: manifest.json too small ($zm < $MIN_MANIFEST)" >&2
-    exit 1
+    fail_verify "nRF52 bundle: manifest.json too small ($zm < $MIN_MANIFEST)"
   fi
   echo "nRF52 DFU bundle OK: firmware.bin=$zb firmware.dat=$zd manifest.json=$zm bytes"
   exit 0
@@ -163,8 +193,7 @@ uf2=$(largest_staged_uf2)
 if [ -n "$uf2" ]; then
   zu=$(bytes "$uf2")
   if [ "$zu" -lt "$MIN_UF2" ]; then
-    echo "UF2 bundle: $(basename "$uf2") too small ($zu < $MIN_UF2)" >&2
-    exit 1
+    fail_verify "UF2 bundle: $(basename "$uf2") too small ($zu < $MIN_UF2)"
   fi
   echo "UF2 bundle OK: $(basename "$uf2") size=$zu bytes"
   exit 0
@@ -174,13 +203,10 @@ hex=$(largest_staged_hex)
 if [ -n "$hex" ]; then
   zh=$(bytes "$hex")
   if [ "$zh" -lt "$MIN_HEX" ]; then
-    echo "HEX bundle: $(basename "$hex") too small ($zh < $MIN_HEX)" >&2
-    exit 1
+    fail_verify "HEX bundle: $(basename "$hex") too small ($zh < $MIN_HEX)"
   fi
   echo "HEX-only bundle OK: $(basename "$hex") size=$zh bytes"
   exit 0
 fi
 
-echo "No recognized firmware payload in bundle (expected ESP32 .bin, or nRF52 firmware.bin+.dat+manifest, or UF2/HEX)" >&2
-ls -la "$STAGE_DIR" >&2
-exit 1
+fail_verify "No recognized firmware payload in bundle (expected ESP32 .bin at root, or nRF52 firmware.bin+.dat+manifest, or UF2/HEX at root)"

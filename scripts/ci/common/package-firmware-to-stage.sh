@@ -37,9 +37,21 @@ else
 fi
 shopt -u nullglob
 
+# Require a flashable payload before adding README/LICENSE (otherwise docs-only tarballs pass the "any file" check).
+shopt -s nullglob
+_fw_stage=( "$STAGE_DIR"/*.bin "$STAGE_DIR"/*.uf2 "$STAGE_DIR"/*.hex )
+shopt -u nullglob
+if [ "${#_fw_stage[@]}" -eq 0 ]; then
+  echo "package-firmware-to-stage: no .bin/.uf2/.hex staged from $BUILD_DIR (refusing docs-only bundle)" >&2
+  echo "--- Build dir listing ---" >&2
+  ls -la "$BUILD_DIR" >&2 || true
+  exit 1
+fi
+unset _fw_stage
+
 bash "$MESH_FORGE_ROOT/scripts/ci/common/stage-fw-bundle-docs.sh" "$FIRMWARE_ROOT" "$STAGE_DIR"
 
-if [ -z "$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -type f -print -quit)" ]; then
-  echo "No firmware artifacts found in $BUILD_DIR" >&2
+if [ -z "$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -type f 2>/dev/null | head -1)" ]; then
+  echo "No files in stage after packaging $BUILD_DIR" >&2
   exit 1
 fi
