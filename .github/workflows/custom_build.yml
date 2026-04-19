@@ -96,7 +96,7 @@ jobs:
           path: |
             ~/.platformio/.cache
             ~/.platformio/packages
-          key: platformio-${{ runner.os }}-v1-${{ hashFiles('.github/workflows/custom_build.yml', '.github/workflows/custom_build_test.yml') }}
+          key: platformio-${{ runner.os }}-v1-${{ hashFiles('.github/workflows/custom_build.yml') }}
           restore-keys: |
             platformio-${{ runner.os }}-v1-
 
