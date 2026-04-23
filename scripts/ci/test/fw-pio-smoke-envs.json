@@ -25,11 +25,6 @@
       "path": "vendor/meshcore-firmware",
       "heltec_v3": "Heltec_v3_companion_radio_ble",
       "rak_4631": "RAK_4631_companion_radio_ble"
-    },
-    {
-      "path": "vendor/meshcore-lotato",
-      "heltec_v3": "Heltec_v3_repeater",
-      "rak_4631": "RAK_4631_repeater"
     }
   ]
 }
