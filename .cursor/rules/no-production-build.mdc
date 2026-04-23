@@ -1,10 +1,13 @@
 ---
-description: Do not run Vite/production builds by default; they freeze this environment.
+description: Do not run project or production builds unless the user explicitly asks.
 alwaysApply: true
 ---
 
-# Production build (Vite)
+# Do not build projects
 
-Do **not** run `vite build`, `bun run build`, `npm run build`, or equivalent full production bundles **unless the user explicitly asks** for a build. They tend to freeze or stall here.
+Do **not** run builds for apps, samples, or firmware in this repo **unless the user explicitly asks** for a build. That includes:
 
-Prefer lighter checks when validating changes (e.g. `tsc --noEmit`, `eslint`, targeted tests) or rely on static review. If a build is truly needed, say so and let the user run it locally or in CI.
+- Web / bundlers: `vite build`, `bun run build`, `npm run build`, or equivalent production bundles (they often freeze or stall here).
+- Embedded / samples: PlatformIO (`pio run`, `platformio`), firmware toolchains, `cmake --build`, `cargo build` for project crates, and similar full project builds.
+
+Prefer lighter checks when validating changes (e.g. `tsc --noEmit`, `eslint`, targeted tests) or static review. If a build is truly needed, say so and let the user run it locally or in CI.
