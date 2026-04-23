@@ -16,10 +16,12 @@ import { toast } from "sonner"
 import { buildFlashParts } from "../lib/espFlashLayout"
 import {
   ensureSerialPortClosed,
+  ESP_FLASH_BAUD_OPTIONS,
   ESP_FLASH_WEB_BAUD,
   isSerialUserCancelledError,
   pulseUsbBootloaderOnPort,
   runEspFlash,
+  type EspFlashBaud,
   type FlashPhase,
 } from "../lib/espFlashRun"
 import { inferTargetFamilyFromBundle, inferTargetFamilyFromEnv } from "../lib/flashTargetFamily"
@@ -84,6 +86,7 @@ export default function DeviceFlasher({
   const [busy, setBusy] = useState(false)
   const shareDialogRef = useRef<HTMLDialogElement>(null)
   const [eraseFlashForFactory, setEraseFlashForFactory] = useState(false)
+  const [flashBaud, setFlashBaud] = useState<EspFlashBaud>(ESP_FLASH_WEB_BAUD)
   const [bundleFamily, setBundleFamily] = useState<FlashTargetFamily>(inferTargetFamilyFromEnv(targetEnv) ?? "esp32")
   const [bundleCanErase, setBundleCanErase] = useState(false)
   const [flashProgress, setFlashProgress] = useState<FlashProgress | null>(null)
@@ -175,7 +178,7 @@ export default function DeviceFlasher({
         await runEspFlash({
           port,
           parts: plan.parts,
-          baud: ESP_FLASH_WEB_BAUD,
+          baud: flashBaud,
           eraseAll: eraseFlashForFactory || plan.eraseAll,
           onPhase: phase => {
             setFlashProgress({ kind: "indeterminate", label: PHASE_LABEL[phase] })
@@ -212,7 +215,7 @@ export default function DeviceFlasher({
         setFlashProgress(null)
       }
     }
-  }, [eraseFlashForFactory, prepareBundle, canEspFlash, flashBlockedReason, resolvedFamily])
+  }, [eraseFlashForFactory, flashBaud, prepareBundle, canEspFlash, flashBlockedReason, resolvedFamily])
 
   const shareUrlTrimmed = useMemo(() => sharePageUrl?.trim() ?? "", [sharePageUrl])
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
@@ -299,6 +302,25 @@ export default function DeviceFlasher({
           </button>
           <span className="text-sm font-medium text-slate-200">Full device reset</span>
         </div>
+
+        {resolvedFamily === "esp32" ? (
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <span>Baud</span>
+            <select
+              value={flashBaud}
+              onChange={e => setFlashBaud(Number(e.target.value) as EspFlashBaud)}
+              disabled={busy || !canEspFlash}
+              className="h-8 rounded-md border border-slate-600 bg-slate-900/60 px-2 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Lower the baud rate if flashing fails on a cheap cable or USB hub."
+            >
+              {ESP_FLASH_BAUD_OPTIONS.map(b => (
+                <option key={b} value={b}>
+                  {b.toLocaleString()}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       {!canFullReset ? (
