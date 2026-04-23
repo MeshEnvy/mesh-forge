@@ -1,0 +1,18 @@
+---
+description: Use Conventional Commits; keep subject under 50 characters.
+alwaysApply: true
+---
+
+# Conventional commits
+
+When writing git commit messages:
+
+- Use Conventional Commits: `<type>(<scope>): <subject>` or `<type>: <subject>`.
+- Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`, `revert`.
+- Keep the subject line under 50 characters (including type/scope prefix).
+- Use imperative mood and lowercase subject text.
+
+Examples:
+
+- `feat(flasher): add retry after connect failure`
+- `fix(repo): handle missing branch metadata`
