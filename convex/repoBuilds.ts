@@ -2,9 +2,11 @@ import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server"
 
-export function normalizeBuildKey(resolvedSourceSha: string, targetEnv: string): string {
+export function normalizeBuildKey(resolvedSourceSha: string, targetEnv: string, platformRoot?: string): string {
+  const p = (platformRoot ?? "").trim().replace(/\//g, "_")
   const t = targetEnv.replace(/\//g, "_")
-  return `${resolvedSourceSha}_${t}`
+  if (!p) return `${resolvedSourceSha}_${t}`
+  return `${resolvedSourceSha}_${p}_${t}`
 }
 
 export const getById = query({
@@ -34,9 +36,11 @@ export const ensureBuild = mutation({
     ref: v.string(),
     resolvedSourceSha: v.string(),
     targetEnv: v.string(),
+    platformRoot: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const buildKey = normalizeBuildKey(args.resolvedSourceSha, args.targetEnv)
+    const platformRoot = args.platformRoot ?? ""
+    const buildKey = normalizeBuildKey(args.resolvedSourceSha, args.targetEnv, platformRoot)
     const existing = await ctx.db
       .query("repoBuilds")
       .withIndex("by_buildKey", q => q.eq("buildKey", buildKey))
@@ -60,6 +64,7 @@ export const ensureBuild = mutation({
       repo: args.repo,
       ref: args.ref,
       resolvedSourceSha: args.resolvedSourceSha,
+      platformRoot: platformRoot || undefined,
       targetEnv: args.targetEnv,
       buildKey,
       status: "queued",
@@ -159,6 +164,7 @@ export const retryBuild = mutation({
       repo: doc.repo,
       ref: doc.ref,
       resolvedSourceSha: doc.resolvedSourceSha,
+      platformRoot: doc.platformRoot,
       targetEnv: doc.targetEnv,
       buildKey: doc.buildKey,
       status: "queued",

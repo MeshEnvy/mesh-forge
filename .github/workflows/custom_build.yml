@@ -27,6 +27,11 @@ on:
       convex_url:
         required: true
         type: string
+      platform_root:
+        description: Monorepo subdirectory (git submodule path) containing the PlatformIO project; empty = zip at repo root
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -36,7 +41,7 @@ jobs:
       REPO_BUILD_ID: ${{ inputs.repo_build_id }}
       CONVEX_BUILD_TOKEN: ${{ secrets.CONVEX_BUILD_TOKEN }}
       CI_PROGRESS_TOTAL: "10"
-      PLATFORMIO_LIBDEPS_DIR: ${{ github.workspace }}/.pio-libdeps/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.target_env }}
+      PLATFORMIO_LIBDEPS_DIR: ${{ github.workspace }}/.pio-libdeps/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.platform_root == '' && '__root__' || inputs.platform_root }}/${{ inputs.target_env }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,6 +78,7 @@ jobs:
         run: python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
 
       - name: Download source archive
+        if: ${{ inputs.platform_root == '' }}
         shell: bash
         env:
           OWNER: ${{ inputs.owner }}
@@ -82,6 +88,32 @@ jobs:
           STEP_INDEX=3 LABEL="Downloading source archive" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           ENC_REF=$(python3 -c "import urllib.parse,os; print(urllib.parse.quote(os.environ['REF'], safe=''))")
           curl -fsSL -o /tmp/src.zip "https://codeload.github.com/${OWNER}/${REPO}/zip/${ENC_REF}"
+
+      - name: Clone monorepo with submodules
+        if: ${{ inputs.platform_root != '' }}
+        shell: bash
+        env:
+          OWNER: ${{ inputs.owner }}
+          REPO: ${{ inputs.repo }}
+          REF: ${{ inputs.ref }}
+          PLATFORM_ROOT: ${{ inputs.platform_root }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STEP_INDEX=3 LABEL="Cloning monorepo with submodules" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq git
+          rm -rf /tmp/fw-checkout
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER}/${REPO}.git" /tmp/fw-checkout
+          cd /tmp/fw-checkout
+          git checkout "${REF}"
+          git submodule update --init --recursive
+          SUB="$(pwd)/${PLATFORM_ROOT}"
+          if [ ! -d "$SUB" ]; then
+            echo "platform_root directory missing: ${PLATFORM_ROOT}"
+            exit 1
+          fi
+          printf '%s\n' "$SUB" > /tmp/fw-src-root.txt
+          mkdir -p "$PLATFORMIO_LIBDEPS_DIR"
 
       - name: CI progress — restoring PlatformIO global cache
         shell: bash
@@ -111,10 +143,11 @@ jobs:
       - name: Cache PlatformIO libdeps (per repo + target)
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.pio-libdeps/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.target_env }}
-          key: pio-libdeps-${{ inputs.owner }}-${{ inputs.repo }}-${{ inputs.target_env }}-v1
+          path: ${{ github.workspace }}/.pio-libdeps/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.platform_root == '' && '__root__' || inputs.platform_root }}/${{ inputs.target_env }}
+          key: pio-libdeps-${{ inputs.owner }}-${{ inputs.repo }}-${{ inputs.platform_root == '' && 'root' || inputs.platform_root }}-${{ inputs.target_env }}-v1
 
       - name: Extract firmware source
+        if: ${{ inputs.platform_root == '' }}
         shell: bash
         run: |
           STEP_INDEX=6 LABEL="Extracting firmware source" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"

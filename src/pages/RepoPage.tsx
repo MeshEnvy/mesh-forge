@@ -23,6 +23,7 @@ import DeviceFlasher from "../components/DeviceFlasher"
 import { normalizeBuildKey } from "../lib/buildKey"
 import { buildFailurePresentation } from "../lib/formatBuildErrorSummary"
 import { homepageHref } from "../lib/githubHomepage"
+import { mergeEffectiveMeshforgeConfig, meshforgePlatformKeys } from "@/convex/lib/meshforgeYaml"
 import { filterEnvNames, filterTagNames, type MeshforgeConfig } from "../lib/meshforgeApplyProfile"
 import { resolveReadmeRelativeUrl } from "../lib/readmeAssetUrl"
 import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
@@ -60,6 +61,7 @@ export default function RepoPage() {
   const {
     sourceRef,
     targetEnv: targetFromUrl,
+    platformKey: platformFromUrl,
     flash: flashFromUrl,
   } = useMemo(() => parseTreeSplat(treePath), [treePath])
   const isFlashView = flashFromUrl
@@ -81,6 +83,8 @@ export default function RepoPage() {
   /** Git ref from URL only (null = short `/owner/repo` → redirect to latest SemVer tag). */
   const effectiveRef = sourceRef
 
+  const tagRowReady = tagData !== undefined && tagData.row !== null
+
   useEffect(() => {
     if (!owner || !repo || tagData === undefined) return
     if (tagData.row !== null && !tagData.isStale) return
@@ -99,23 +103,34 @@ export default function RepoPage() {
       const candidates = cfg ? filterTagNames(allSorted, cfg) : allSorted
       const latest = candidates[0]
       if (latest) {
-        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+        const pk = meshforgePlatformKeys(cfg as MeshforgeConfig)
+        navigate(
+          `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null, pk[0] ? { platform: pk[0] } : undefined)}`,
+          { replace: true }
+        )
         return
       }
       // Profile filtered out all tags; use default branch when available.
       if (defaultBranch) {
-        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
+        const pk = meshforgePlatformKeys(cfg as MeshforgeConfig)
+        navigate(
+          `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null, pk[0] ? { platform: pk[0] } : undefined)}`,
+          { replace: true }
+        )
       }
     } else {
       // No tags — redirect to the repo's default branch if known
       if (!defaultBranch) return
-      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
+      const pk = meshforgePlatformKeys((tagData.row?.meshforgeConfig ?? null) as MeshforgeConfig | null)
+      navigate(
+        `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null, pk[0] ? { platform: pk[0] } : undefined)}`,
+        { replace: true }
+      )
     }
   }, [owner, repo, sourceRef, tagData, navigate, ownerParam, repoParam])
 
   const [resolvedSha, setResolvedSha] = useState<string | null>(null)
   const [refError, setRefError] = useState<string | null>(null)
-  const [pendingTagRefreshValidation, setPendingTagRefreshValidation] = useState(false)
   const [isRefreshingRepo, setIsRefreshingRepo] = useState(false)
   const [refreshResolveTick, setRefreshResolveTick] = useState(0)
   const [readmeRefreshTick, setReadmeRefreshTick] = useState(0)
@@ -141,31 +156,113 @@ export default function RepoPage() {
     }
   }, [owner, repo, effectiveRef, resolveRef, navigate, ownerParam, repoParam, refreshResolveTick])
 
-  useEffect(() => {
-    if (!pendingTagRefreshValidation || !sourceRef || tagData === undefined) return
-    setPendingTagRefreshValidation(false)
-    const tags = tagData.row?.tags ?? []
-    const defaultBranch = (tagData.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
-    const normalizedSourceRef = sourceRef.toLowerCase()
-    const refStillExists =
-      tags.some(t => t.name.toLowerCase() === normalizedSourceRef) ||
-      defaultBranch?.toLowerCase() === normalizedSourceRef
-    if (!refStillExists) {
-      navigate(`/${ownerParam}/${repoParam}`, { replace: true })
-    }
-  }, [pendingTagRefreshValidation, sourceRef, tagData, navigate, ownerParam, repoParam])
-
-  useEffect(() => {
-    if (!owner || !repo || !effectiveRef || !resolvedSha) return
-    void ensureScan({ owner, repo, ref: effectiveRef, resolvedSourceSha: resolvedSha }).catch(e =>
-      toast.error(String(e))
-    )
-  }, [owner, repo, effectiveRef, resolvedSha, ensureScan])
+  /** Submodule/platform segment in the URL — drives scan row identity (no circular wait on meshforge). */
+  const scanPlatformRoot = useMemo(() => (platformFromUrl ?? "").trim(), [platformFromUrl])
 
   const scan = useQuery(
     api.repoScans.getByRepoSha,
-    resolvedSha ? { owner, repo, resolvedSourceSha: resolvedSha } : "skip"
+    resolvedSha && tagRowReady
+      ? { owner, repo, resolvedSourceSha: resolvedSha, platformRoot: scanPlatformRoot }
+      : "skip"
   )
+
+  useEffect(() => {
+    if (!isRefreshingRepo) return
+    // Keep refresh active until the current ref re-resolves and scan settles.
+    if (refError) {
+      setIsRefreshingRepo(false)
+      return
+    }
+    if (!effectiveRef) {
+      setIsRefreshingRepo(false)
+      return
+    }
+    if (!resolvedSha) return
+    if (scan == null || scan.scanStatus === "in_progress") return
+    setIsRefreshingRepo(false)
+  }, [isRefreshingRepo, refError, effectiveRef, resolvedSha, scan])
+
+  const tagBootstrapMeshforge = (tagData?.row?.meshforgeConfig ?? null) as MeshforgeConfig | null
+  const scanMeshforgeReady = scan?.scanStatus === "complete"
+  const hasAuthoritativeProfile = scanMeshforgeReady
+  const meshforgeConfig = useMemo(() => {
+    if (scanMeshforgeReady) {
+      // Once a ref/platform scan completes, prefer its meshforge.yaml snapshot even if null.
+      return (scan?.meshforgeConfig ?? null) as MeshforgeConfig | null
+    }
+    return tagBootstrapMeshforge
+  }, [scanMeshforgeReady, scan?.meshforgeConfig, tagBootstrapMeshforge])
+
+  const platformMenuKeys = useMemo(() => meshforgePlatformKeys(meshforgeConfig), [meshforgeConfig])
+  const resolvedPlatformKey = useMemo(() => {
+    if (!platformMenuKeys.length) return ""
+    const p = (platformFromUrl ?? "").trim()
+    if (p && platformMenuKeys.includes(p)) return p
+    return ""
+  }, [platformMenuKeys, platformFromUrl])
+
+  const effectiveMeshforgeConfig = useMemo(() => {
+    const m = mergeEffectiveMeshforgeConfig(meshforgeConfig, resolvedPlatformKey || null)
+    return m ?? ({} as MeshforgeConfig)
+  }, [meshforgeConfig, resolvedPlatformKey])
+
+  useLayoutEffect(() => {
+    if (!owner || !repo || !sourceRef) return
+    // Avoid URL auto-correction while scan is still bootstrapping from default-branch profile data.
+    if (!scanMeshforgeReady) return
+    if (!platformMenuKeys.length) return
+    if (resolvedPlatformKey) return
+    const defaultP = platformMenuKeys[0]
+    navigate(
+      `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, targetFromUrl, { platform: defaultP })}`,
+      { replace: true }
+    )
+  }, [
+    owner,
+    repo,
+    sourceRef,
+    targetFromUrl,
+    scanMeshforgeReady,
+    platformMenuKeys,
+    resolvedPlatformKey,
+    navigate,
+    ownerParam,
+    repoParam,
+  ])
+
+  /** Plain PlatformIO repos: meshforge has no `platforms` — drop a stray `/platform/...` from the URL. */
+  useLayoutEffect(() => {
+    if (!owner || !repo || !sourceRef) return
+    if (platformMenuKeys.length > 0) return
+    if (!platformFromUrl) return
+    navigate(
+      `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, targetFromUrl, flashFromUrl ? { flash: true } : undefined)}`,
+      { replace: true }
+    )
+  }, [
+    owner,
+    repo,
+    sourceRef,
+    targetFromUrl,
+    platformFromUrl,
+    platformMenuKeys.length,
+    flashFromUrl,
+    navigate,
+    ownerParam,
+    repoParam,
+  ])
+
+  useEffect(() => {
+    if (!owner || !repo || !effectiveRef || !resolvedSha) return
+    if (!tagRowReady) return
+    void ensureScan({
+      owner,
+      repo,
+      ref: effectiveRef,
+      resolvedSourceSha: resolvedSha,
+      platformRoot: scanPlatformRoot,
+    }).catch(e => toast.error(String(e)))
+  }, [owner, repo, effectiveRef, resolvedSha, ensureScan, tagRowReady, scanPlatformRoot])
 
   const [readmeMd, setReadmeMd] = useState<string | null>(null)
   const [readmeDownloadUrl, setReadmeDownloadUrl] = useState<string | null>(null)
@@ -260,15 +357,16 @@ export default function RepoPage() {
     return sortTagNames([...raw, ...extra])
   }, [tagData?.row, sourceRef])
 
-  // meshforgeConfig comes from the default branch (stored on the tag list, available before
-  // a tag is selected so the tag dropdown itself can be filtered).
-  const meshforgeConfig = (tagData?.row?.meshforgeConfig ?? null) as MeshforgeConfig | null
   const envCapabilities = (scan?.scanStatus === "complete" ? scan.envCapabilities : null) as Record<
     string,
     string[]
   > | null
+  const profileMatchedTagOptions = useMemo(
+    () => filterTagNames(tagOptions, effectiveMeshforgeConfig),
+    [tagOptions, effectiveMeshforgeConfig]
+  )
   const filteredTagOptions = useMemo(() => {
-    const filtered = filterTagNames(tagOptions, meshforgeConfig ?? {})
+    const filtered = profileMatchedTagOptions
     // Always keep sourceRef and defaultBranch selectable even if the profile filter drops them
     const defaultBranch = (tagData?.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
     const reinjected = new Set(filtered.map(n => n.toLowerCase()))
@@ -288,7 +386,7 @@ export default function RepoPage() {
       }
     }
     return extras.length > 0 ? sortTagNames([...filtered, ...extras]) : filtered
-  }, [tagOptions, meshforgeConfig, sourceRef, tagData?.row])
+  }, [profileMatchedTagOptions, sourceRef, tagData?.row])
   const [refShaByName, setRefShaByName] = useState<Record<string, string>>({})
   useEffect(() => {
     setRefShaByName({})
@@ -332,8 +430,8 @@ export default function RepoPage() {
     return sha ? `${name} (${sha.slice(0, 7)})` : name
   }
   const filteredEnvNames = useMemo(
-    () => filterEnvNames(envNames, meshforgeConfig, envCapabilities ?? {}, tagDraft),
-    [envNames, meshforgeConfig, envCapabilities, tagDraft]
+    () => filterEnvNames(envNames, effectiveMeshforgeConfig, envCapabilities ?? {}, tagDraft),
+    [envNames, effectiveMeshforgeConfig, envCapabilities, tagDraft]
   )
 
   const resolvedTargetEnv =
@@ -354,11 +452,28 @@ export default function RepoPage() {
     if (!sourceRef || !targetFromUrl) return
     if (scan?.scanStatus !== "complete") return
     if (envNames.length === 0 || !envNames.includes(targetFromUrl)) {
-      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null)}`, { replace: true })
+      navigate(
+        `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null, {
+          platform: resolvedPlatformKey || undefined,
+        })}`,
+        { replace: true }
+      )
     }
-  }, [sourceRef, targetFromUrl, envNames, scan?.scanStatus, navigate, ownerParam, repoParam])
+  }, [
+    sourceRef,
+    targetFromUrl,
+    envNames,
+    scan?.scanStatus,
+    navigate,
+    ownerParam,
+    repoParam,
+    resolvedPlatformKey,
+  ])
 
-  const buildKey = resolvedSha && resolvedTargetEnv ? normalizeBuildKey(resolvedSha, resolvedTargetEnv) : null
+  const buildKey =
+    resolvedSha && resolvedTargetEnv && (!platformMenuKeys.length || resolvedPlatformKey)
+      ? normalizeBuildKey(resolvedSha, resolvedTargetEnv, resolvedPlatformKey)
+      : null
   const build = useQuery(api.repoBuilds.getByBuildKey, buildKey && isFlashView ? { buildKey } : "skip")
 
   /** Only show CI failure UI if this tab saw the build move into `failed` (not for stale failures on load). */
@@ -430,12 +545,14 @@ export default function RepoPage() {
   useEffect(() => {
     if (!isFlashView || !owner || !repo || !effectiveRef || !resolvedSha || !resolvedTargetEnv) return
     if (!(hasRef && resolvedSha && scan?.scanStatus === "complete" && envNames.length > 0)) return
+    if (platformMenuKeys.length > 0 && !resolvedPlatformKey) return
     void ensureBuild({
       owner,
       repo,
       ref: effectiveRef,
       resolvedSourceSha: resolvedSha,
       targetEnv: resolvedTargetEnv,
+      platformRoot: resolvedPlatformKey,
     }).catch(e => toast.error(String(e)))
   }, [
     isFlashView,
@@ -448,13 +565,18 @@ export default function RepoPage() {
     scan,
     envNames.length,
     ensureBuild,
+    platformMenuKeys.length,
+    resolvedPlatformKey,
   ])
 
   const queueFlashArtifacts = () => {
     if (!effectiveRef || !resolvedSha || !resolvedTargetEnv) return
     const goFlash = () =>
       navigate(
-        `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(effectiveRef, resolvedTargetEnv, { flash: true })}`
+        `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(effectiveRef, resolvedTargetEnv, {
+          flash: true,
+          platform: resolvedPlatformKey || undefined,
+        })}`
       )
     void ensureBuild({
       owner,
@@ -462,6 +584,7 @@ export default function RepoPage() {
       ref: effectiveRef,
       resolvedSourceSha: resolvedSha,
       targetEnv: resolvedTargetEnv,
+      platformRoot: resolvedPlatformKey,
     })
       .then(res => {
         if (res.status === "failed") {
@@ -516,7 +639,13 @@ export default function RepoPage() {
   const ghAboutDescription = tagData.row.description?.trim() ?? ""
   const ghAboutHomepage = tagData.row.homepage?.trim() ?? ""
 
-  const scanReady = Boolean(hasRef && resolvedSha && scan?.scanStatus === "complete" && envNames.length > 0)
+  const scanReady = Boolean(
+    hasRef &&
+      resolvedSha &&
+      scan?.scanStatus === "complete" &&
+      envNames.length > 0 &&
+      (!platformMenuKeys.length || Boolean(resolvedPlatformKey))
+  )
   const buildInProgress = Boolean(build && (build.status === "queued" || build.status === "running"))
   const flashPrimaryDisabled =
     !hasRef ||
@@ -542,11 +671,16 @@ export default function RepoPage() {
               : "No targets match profile"
             : "--target--"
 
-  const backToRepoPath = `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, resolvedTargetEnv || null)}`
+  const backToRepoPath = `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, resolvedTargetEnv || null, {
+    platform: resolvedPlatformKey || undefined,
+  })}`
 
   const statusStripEl = (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
       {tagData?.isStale ? <span>Tag list may be stale.</span> : null}
+      {hasAuthoritativeProfile && tagOptions.length > 0 && profileMatchedTagOptions.length === 0 ? (
+        <span className="text-amber-300">No refs match current profile.</span>
+      ) : null}
       {refError ? <span className="text-red-400">{refError}</span> : null}
       {!refError && hasRef && !resolvedSha ? <span>Resolving tag…</span> : null}
       {resolvedSha && (scan == null || scan.scanStatus === "in_progress") ? <span>Scanning PlatformIO…</span> : null}
@@ -720,6 +854,14 @@ export default function RepoPage() {
                     </dt>
                     <dd className="font-mono text-slate-200 min-w-0 wrap-break-word">{effectiveRef}</dd>
                   </div>
+                  {resolvedPlatformKey ? (
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500 shrink-0 w-30">
+                        Platform
+                      </dt>
+                      <dd className="font-mono text-slate-200 min-w-0 wrap-break-word">{resolvedPlatformKey}</dd>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500 shrink-0 w-30">
                       Target
@@ -758,11 +900,37 @@ export default function RepoPage() {
                       return
                     }
                     if (filteredTagOptions.includes(v)) {
-                      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, targetFromUrl)}`)
+                      navigate(
+                        `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(v, targetFromUrl, {
+                          platform: resolvedPlatformKey || undefined,
+                        })}`
+                      )
                     }
                   }}
                   disabled={filteredTagOptions.length === 0}
                 />
+                {hasRef && platformMenuKeys.length > 0 ? (
+                  <ComboboxField
+                    label="Platform"
+                    layout="inline"
+                    id="mesh-forge-platform"
+                    options={platformMenuKeys}
+                    value={resolvedPlatformKey}
+                    placeholder="--platform--"
+                    onChange={v => {
+                      if (!sourceRef) return
+                      if (v === "") return
+                      if (platformMenuKeys.includes(v)) {
+                        navigate(
+                          `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, targetFromUrl, {
+                            platform: v,
+                          })}`
+                        )
+                      }
+                    }}
+                    disabled={!resolvedSha}
+                  />
+                ) : null}
                 {hasRef && scanReady && filteredEnvNames.length > 0 ? (
                   <ComboboxField
                     label="Target"
@@ -777,13 +945,20 @@ export default function RepoPage() {
                       setEnvDraft(v)
                       if (!sourceRef) return
                       if (v === "") {
-                        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null)}`, {
-                          replace: true,
-                        })
+                        navigate(
+                          `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, null, {
+                            platform: resolvedPlatformKey || undefined,
+                          })}`,
+                          { replace: true }
+                        )
                         return
                       }
                       if (filteredEnvNames.includes(v)) {
-                        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, v)}`)
+                        navigate(
+                          `/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(sourceRef, v, {
+                            platform: resolvedPlatformKey || undefined,
+                          })}`
+                        )
                       }
                     }}
                     disabled={false}
@@ -877,15 +1052,15 @@ export default function RepoPage() {
                   onClick={() => {
                     if (isRefreshingRepo) return
                     // Force re-resolve current ref so moving branches pick up latest SHA.
+                    setResolvedSha(null)
+                    setRefError(null)
                     setRefreshResolveTick(t => t + 1)
                     setReadmeRefreshTick(t => t + 1)
                     setIsRefreshingRepo(true)
-                    void refreshTags({ owner, repo })
-                      .then(() => {
-                        setPendingTagRefreshValidation(true)
-                      })
-                      .catch(e => toast.error(String(e)))
-                      .finally(() => setIsRefreshingRepo(false))
+                    void refreshTags({ owner, repo }).catch(e => {
+                      toast.error(String(e))
+                      setIsRefreshingRepo(false)
+                    })
                   }}
                 >
                   <RefreshCw className={`size-3.5 ${isRefreshingRepo ? "animate-spin" : ""}`} />

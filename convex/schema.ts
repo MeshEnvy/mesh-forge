@@ -28,12 +28,14 @@ export const repoRefScanFields = {
   owner: v.string(),
   repo: v.string(),
   resolvedSourceSha: v.string(),
+  /** Submodule directory containing the PlatformIO project (`""` = repo root). */
+  platformRoot: v.optional(v.string()),
   scanStatus: v.union(v.literal("in_progress"), v.literal("complete"), v.literal("failed")),
   envNames: v.optional(v.array(v.string())),
   grouped: v.optional(v.any()),
   /** Detected capability sets keyed by env name, e.g. { "LilyGo_TDeck_repeater": ["wifi","ble"] }. */
   envCapabilities: v.optional(v.any()),
-  /** Parsed meshforge.yaml config from the scanned source tree, if present. */
+  /** Parsed meshforge.yaml from the scanned ref tree (repo root), when present. */
   meshforgeConfig: v.optional(v.any()),
   scanError: v.optional(v.string()),
   scannedAt: v.optional(v.number()),
@@ -48,6 +50,8 @@ export const repoBuildsFields = {
   repo: v.string(),
   ref: v.string(),
   resolvedSourceSha: v.string(),
+  /** Same as repoRefScan: PlatformIO project lives under this path in the monorepo. */
+  platformRoot: v.optional(v.string()),
   targetEnv: v.string(),
   buildKey: v.string(),
   status: v.union(v.literal("queued"), v.literal("running"), v.literal("succeeded"), v.literal("failed")),
@@ -81,7 +85,9 @@ export const userSettingsFields = {
 export const schema = defineSchema({
   ...authTables,
   repoTagList: defineTable(repoTagListFields).index("by_owner_repo", ["owner", "repo"]),
-  repoRefScan: defineTable(repoRefScanFields).index("by_repo_sha", ["owner", "repo", "resolvedSourceSha"]),
+  repoRefScan: defineTable(repoRefScanFields)
+    .index("by_repo_sha", ["owner", "repo", "resolvedSourceSha"])
+    .index("by_repo_sha_platform", ["owner", "repo", "resolvedSourceSha", "platformRoot"]),
   repoBuilds: defineTable(repoBuildsFields)
     .index("by_buildKey", ["buildKey"])
     .index("by_owner_repo", ["owner", "repo"])

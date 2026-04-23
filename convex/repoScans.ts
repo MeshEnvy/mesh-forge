@@ -1,23 +1,62 @@
-import { unzipSync, strFromU8 } from "fflate"
 import { v } from "convex/values"
 import { api, internal } from "./_generated/api"
-import { collectPlatformioEnvsFromFiles, normalizeZipPaths } from "./lib/platformioScan"
-import { parseMeshforgeYaml } from "./lib/meshforgeYaml"
+import type { MutationCtx } from "./_generated/server"
 import { action, internalMutation, mutation, query } from "./_generated/server"
+
+async function findRepoRefScan(
+  ctx: Pick<MutationCtx, "db">,
+  args: { owner: string; repo: string; resolvedSourceSha: string; platformRoot: string }
+) {
+  const pr = args.platformRoot
+  let existing = await ctx.db
+    .query("repoRefScan")
+    .withIndex("by_repo_sha_platform", q =>
+      q
+        .eq("owner", args.owner)
+        .eq("repo", args.repo)
+        .eq("resolvedSourceSha", args.resolvedSourceSha)
+        .eq("platformRoot", pr)
+    )
+    .first()
+  if (!existing && pr === "") {
+    existing = await ctx.db
+      .query("repoRefScan")
+      .withIndex("by_repo_sha", q =>
+        q.eq("owner", args.owner).eq("repo", args.repo).eq("resolvedSourceSha", args.resolvedSourceSha)
+      )
+      .first()
+  }
+  return existing
+}
 
 export const getByRepoSha = query({
   args: {
     owner: v.string(),
     repo: v.string(),
     resolvedSourceSha: v.string(),
+    platformRoot: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const pr = args.platformRoot ?? ""
+    let row = await ctx.db
       .query("repoRefScan")
-      .withIndex("by_repo_sha", q =>
-        q.eq("owner", args.owner).eq("repo", args.repo).eq("resolvedSourceSha", args.resolvedSourceSha)
+      .withIndex("by_repo_sha_platform", q =>
+        q
+          .eq("owner", args.owner)
+          .eq("repo", args.repo)
+          .eq("resolvedSourceSha", args.resolvedSourceSha)
+          .eq("platformRoot", pr)
       )
       .first()
+    if (!row && pr === "") {
+      row = await ctx.db
+        .query("repoRefScan")
+        .withIndex("by_repo_sha", q =>
+          q.eq("owner", args.owner).eq("repo", args.repo).eq("resolvedSourceSha", args.resolvedSourceSha)
+        )
+        .first()
+    }
+    return row
   },
 })
 
@@ -48,14 +87,16 @@ export const ensureScan = mutation({
     repo: v.string(),
     ref: v.string(),
     resolvedSourceSha: v.string(),
+    platformRoot: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("repoRefScan")
-      .withIndex("by_repo_sha", q =>
-        q.eq("owner", args.owner).eq("repo", args.repo).eq("resolvedSourceSha", args.resolvedSourceSha)
-      )
-      .first()
+    const platformRoot = args.platformRoot ?? ""
+    const existing = await findRepoRefScan(ctx, {
+      owner: args.owner,
+      repo: args.repo,
+      resolvedSourceSha: args.resolvedSourceSha,
+      platformRoot,
+    })
 
     if (existing?.scanStatus === "complete") {
       const names = existing.envNames ?? []
@@ -67,7 +108,6 @@ export const ensureScan = mutation({
       if (capsComplete) {
         return { scanId: existing._id, status: "complete" as const }
       }
-      // Completed before envCapabilities existed (or partial write) — rescan same SHA.
       await ctx.db.patch(existing._id, {
         scanStatus: "in_progress",
         envNames: undefined,
@@ -76,13 +116,15 @@ export const ensureScan = mutation({
         meshforgeConfig: undefined,
         scanError: undefined,
         updatedAt: Date.now(),
+        platformRoot: existing.platformRoot ?? platformRoot,
       })
-      await ctx.scheduler.runAfter(0, api.repoScans.runArchiveScan, {
+      await ctx.scheduler.runAfter(0, api.repoScanGitAction.runArchiveScan, {
         scanId: existing._id,
         owner: args.owner,
         repo: args.repo,
         ref: args.ref,
         resolvedSourceSha: args.resolvedSourceSha,
+        platformRoot,
       })
       return { scanId: existing._id, status: "in_progress" as const }
     }
@@ -90,23 +132,43 @@ export const ensureScan = mutation({
       return { scanId: existing._id, status: "in_progress" as const }
     }
     if (existing?.scanStatus === "failed") {
-      return { scanId: existing._id, status: "failed" as const }
+      await ctx.db.patch(existing._id, {
+        scanStatus: "in_progress",
+        envNames: undefined,
+        grouped: undefined,
+        envCapabilities: undefined,
+        meshforgeConfig: undefined,
+        scanError: undefined,
+        updatedAt: Date.now(),
+        platformRoot: existing.platformRoot ?? platformRoot,
+      })
+      await ctx.scheduler.runAfter(0, api.repoScanGitAction.runArchiveScan, {
+        scanId: existing._id,
+        owner: args.owner,
+        repo: args.repo,
+        ref: args.ref,
+        resolvedSourceSha: args.resolvedSourceSha,
+        platformRoot,
+      })
+      return { scanId: existing._id, status: "in_progress" as const }
     }
 
     const scanId = await ctx.db.insert("repoRefScan", {
       owner: args.owner,
       repo: args.repo,
       resolvedSourceSha: args.resolvedSourceSha,
+      platformRoot,
       scanStatus: "in_progress",
       updatedAt: Date.now(),
     })
 
-    await ctx.scheduler.runAfter(0, api.repoScans.runArchiveScan, {
+    await ctx.scheduler.runAfter(0, api.repoScanGitAction.runArchiveScan, {
       scanId,
       owner: args.owner,
       repo: args.repo,
       ref: args.ref,
       resolvedSourceSha: args.resolvedSourceSha,
+      platformRoot,
     })
 
     return { scanId, status: "in_progress" as const }
@@ -146,58 +208,5 @@ export const failScanInternal = internalMutation({
       scanError: args.message,
       updatedAt: Date.now(),
     })
-  },
-})
-
-export const runArchiveScan = action({
-  args: {
-    scanId: v.id("repoRefScan"),
-    owner: v.string(),
-    repo: v.string(),
-    ref: v.string(),
-    resolvedSourceSha: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const token = process.env.GITHUB_TOKEN
-    const zipUrl = `https://codeload.github.com/${args.owner}/${args.repo}/zip/${encodeURIComponent(args.ref)}`
-    const headers: Record<string, string> = {}
-    if (token) headers.Authorization = `Bearer ${token}`
-
-    try {
-      const zipRes = await fetch(zipUrl, { headers, redirect: "follow" })
-      if (!zipRes.ok) {
-        throw new Error(`Archive fetch ${zipRes.status}: ${await zipRes.text()}`)
-      }
-      const buf = new Uint8Array(await zipRes.arrayBuffer())
-      if (buf.byteLength > 80 * 1024 * 1024) {
-        throw new Error("Archive too large for inline scan (max 80MB)")
-      }
-      const files = unzipSync(buf)
-      const virtual = normalizeZipPaths(files, u => strFromU8(u, true))
-      const { envNames, grouped, envCapabilities } = collectPlatformioEnvsFromFiles(virtual)
-
-      let meshforgeConfig: ReturnType<typeof parseMeshforgeYaml> = null
-      const yamlContent = virtual['meshforge.yaml']
-      if (yamlContent) {
-        try {
-          meshforgeConfig = parseMeshforgeYaml(yamlContent)
-        } catch {
-          // ignore malformed yaml
-        }
-      }
-
-      await ctx.runMutation(internal.repoScans.completeScanInternal, {
-        scanId: args.scanId,
-        envNames,
-        grouped,
-        envCapabilities,
-        meshforgeConfig: meshforgeConfig ?? undefined,
-      })
-    } catch (e) {
-      await ctx.runMutation(internal.repoScans.failScanInternal, {
-        scanId: args.scanId,
-        message: String(e),
-      })
-    }
   },
 })

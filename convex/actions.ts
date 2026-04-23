@@ -32,6 +32,7 @@ export const dispatchRepoBuild = action({
         repo: doc.repo,
         ref: doc.ref,
         target_env: doc.targetEnv,
+        platform_root: doc.platformRoot ?? "",
         repo_build_id: doc._id,
         build_key: doc.buildKey,
         resolved_source_sha: doc.resolvedSourceSha,

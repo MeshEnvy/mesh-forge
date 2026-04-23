@@ -1,3 +1,5 @@
+import YAML from 'yaml'
+
 export interface MeshforgeTagsConfig {
   /** JS regex tested against each tag name. Tags not matching are hidden. */
   include?: string
@@ -20,88 +22,152 @@ export interface MeshforgeTargetsConfig {
   require_capabilities?: string[]
 }
 
+/** Per-platform overlay (submodule name → profile fragment). */
+export interface MeshforgePlatformFragment {
+  tags?: MeshforgeTagsConfig
+  targets?: MeshforgeTargetsConfig
+  /** Same semantics as meshforge root `require_capabilities`; merged into effective targets filter. */
+  require_capabilities?: string[]
+}
+
 export interface MeshforgeConfig {
   tags?: MeshforgeTagsConfig
   targets?: MeshforgeTargetsConfig
+  /** MeshForge root-level capability filter (merged into effective `targets.require_capabilities`). */
+  require_capabilities?: string[]
+  /** Submodule directory names → overlay merged on top of root when that platform is selected. */
+  platforms?: Record<string, MeshforgePlatformFragment>
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return x !== null && typeof x === 'object' && !Array.isArray(x)
+}
+
+function readTags(obj: Record<string, unknown>): MeshforgeTagsConfig | undefined {
+  const t = obj.tags
+  if (!isRecord(t)) return undefined
+  const tags: MeshforgeTagsConfig = {}
+  if (typeof t.include === 'string') tags.include = t.include
+  return Object.keys(tags).length ? tags : undefined
+}
+
+function readTargets(obj: Record<string, unknown>): MeshforgeTargetsConfig | undefined {
+  const t = obj.targets
+  if (!isRecord(t)) return undefined
+  const targets: MeshforgeTargetsConfig = {}
+  if (typeof t.include === 'string') targets.include = t.include
+  if (typeof t.include_template === 'string') targets.include_template = t.include_template
+  if (Array.isArray(t.require_capabilities)) {
+    const caps = t.require_capabilities.filter((c): c is string => typeof c === 'string')
+    if (caps.length) targets.require_capabilities = caps
+  }
+  return Object.keys(targets).length ? targets : undefined
+}
+
+function readPlatformFragment(obj: Record<string, unknown>): MeshforgePlatformFragment {
+  const frag: MeshforgePlatformFragment = {}
+  const tags = readTags(obj)
+  const targets = readTargets(obj)
+  if (tags) frag.tags = tags
+  if (targets) frag.targets = targets
+  if (Array.isArray(obj.require_capabilities)) {
+    const caps = obj.require_capabilities.filter((c): c is string => typeof c === 'string')
+    if (caps.length) frag.require_capabilities = caps
+  }
+  return frag
 }
 
 /**
- * Minimal parser for the meshforge.yaml format. Only the known schema is handled;
- * unknown keys are silently ignored.
- *
- * Supports:
- * - 2-space YAML-like indentation (0 / 2 / 4 spaces)
- * - Quoted ("…" or '…') and unquoted scalar values
- * - Inline flow lists [a, b, c]
- * - Line comments starting with #
+ * Parse meshforge.yaml using a real YAML parser (nested `platforms:` and root keys).
  */
 export function parseMeshforgeYaml(raw: string): MeshforgeConfig | null {
+  let doc: unknown
+  try {
+    doc = YAML.parse(raw)
+  } catch {
+    return null
+  }
+  if (!isRecord(doc)) return null
+  const mf = doc.meshforge
+  if (!isRecord(mf)) return null
+
   const config: MeshforgeConfig = {}
-  let inMeshforge = false
-  let section: 'tags' | 'targets' | null = null
+  const tags = readTags(mf)
+  const targets = readTargets(mf)
+  if (tags) config.tags = tags
+  if (targets) config.targets = targets
 
-  for (const rawLine of raw.split(/\r?\n/)) {
-    const stripped = rawLine.replace(/#.*$/, '').trimEnd()
-    if (!stripped.trim()) continue
-
-    const indent = stripped.length - stripped.trimStart().length
-    const content = stripped.trimStart()
-
-    if (indent === 0) {
-      inMeshforge = content === 'meshforge:'
-      section = null
-      continue
-    }
-
-    if (!inMeshforge) continue
-
-    if (indent === 2) {
-      if (content === 'tags:') {
-        section = 'tags'
-        if (!config.tags) config.tags = {}
-      } else if (content === 'targets:') {
-        section = 'targets'
-        if (!config.targets) config.targets = {}
-      } else {
-        section = null
-      }
-      continue
-    }
-
-    if (indent === 4 && section) {
-      const kv = content.match(/^(\w+):\s*(.*)$/)
-      if (!kv) continue
-      const [, key, rawVal] = kv
-      if (section === 'tags') {
-        if (key === 'include') config.tags!.include = parseScalar(rawVal)
-      } else if (section === 'targets') {
-        if (key === 'include') config.targets!.include = parseScalar(rawVal)
-        else if (key === 'include_template') config.targets!.include_template = parseScalar(rawVal)
-        else if (key === 'require_capabilities') config.targets!.require_capabilities = parseInlineList(rawVal)
-      }
-    }
+  if (Array.isArray(mf.require_capabilities)) {
+    const caps = mf.require_capabilities.filter((c): c is string => typeof c === 'string')
+    if (caps.length) config.require_capabilities = caps
   }
 
-  if (!config.tags && !config.targets) return null
+  if (isRecord(mf.platforms)) {
+    const platforms: Record<string, MeshforgePlatformFragment> = {}
+    for (const [name, fragRaw] of Object.entries(mf.platforms)) {
+      const key = name.trim()
+      if (!key) continue
+      if (fragRaw === null || fragRaw === undefined) {
+        platforms[key] = {}
+      } else if (isRecord(fragRaw)) {
+        platforms[key] = readPlatformFragment(fragRaw)
+      }
+    }
+    if (Object.keys(platforms).length) config.platforms = platforms
+  }
+
+  if (!config.tags && !config.targets && !config.platforms && !config.require_capabilities) return null
   return config
 }
 
-function parseScalar(raw: string): string {
-  const s = raw.trim()
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    return s.slice(1, -1)
-  }
-  return s
+function rootCapabilityUnion(config: MeshforgeConfig): string[] {
+  const a = config.targets?.require_capabilities ?? []
+  const b = config.require_capabilities ?? []
+  return [...new Set([...a, ...b])]
 }
 
-function parseInlineList(raw: string): string[] {
-  const s = raw.trim()
-  if (s.startsWith('[') && s.endsWith(']')) {
-    return s
-      .slice(1, -1)
-      .split(',')
-      .map(p => parseScalar(p.trim()))
-      .filter(Boolean)
+/** Sorted submodule / platform keys from `meshforge.platforms`. */
+export function meshforgePlatformKeys(config: MeshforgeConfig | null | undefined): string[] {
+  if (!config?.platforms) return []
+  return Object.keys(config.platforms)
+    .map(k => k.trim())
+    .filter(Boolean)
+    .sort((x, y) => x.localeCompare(y))
+}
+
+/**
+ * Root meshforge plus optional platform overlay (for tag/target filtering in UI and CI context).
+ * Strips `platforms` from the result — callers use {@link meshforgePlatformKeys} for the menu.
+ */
+export function mergeEffectiveMeshforgeConfig(
+  config: MeshforgeConfig | null,
+  platformKey: string | null
+): MeshforgeConfig | null {
+  if (!config) return null
+  const baseCaps = rootCapabilityUnion(config)
+  const stripPlatforms = (): MeshforgeConfig => {
+    const { platforms: _p, ...rest } = config
+    const out: MeshforgeConfig = { ...rest }
+    if (baseCaps.length) {
+      out.targets = { ...out.targets, require_capabilities: baseCaps }
+    }
+    return out
   }
-  return s ? [parseScalar(s)] : []
+
+  if (!platformKey || !config.platforms?.[platformKey]) {
+    return stripPlatforms()
+  }
+
+  const frag = config.platforms[platformKey]
+  const fragCaps = [...(frag.targets?.require_capabilities ?? []), ...(frag.require_capabilities ?? [])]
+  const mergedCaps = [...new Set([...baseCaps, ...fragCaps])]
+
+  return {
+    tags: { ...config.tags, ...frag.tags },
+    targets: {
+      ...config.targets,
+      ...frag.targets,
+      ...(mergedCaps.length ? { require_capabilities: mergedCaps } : {}),
+    },
+  }
 }

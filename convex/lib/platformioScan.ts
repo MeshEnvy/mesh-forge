@@ -1,10 +1,12 @@
 /**
  * Parse PlatformIO-style INI content and collect [env:...] section names from file contents.
+ * Pure string logic — safe to import from either Convex runtime.
  */
 
 export function parseIniSections(content: string): Record<string, Record<string, string>> {
   const sections: Record<string, Record<string, string>> = {}
   let current: string | null = null
+  let lastKey: string | null = null
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) continue
@@ -12,6 +14,7 @@ export function parseIniSections(content: string): Record<string, Record<string,
     if (sec) {
       current = sec[1]
       if (!sections[current]) sections[current] = {}
+      lastKey = null
       continue
     }
     if (current && trimmed.includes('=')) {
@@ -19,6 +22,13 @@ export function parseIniSections(content: string): Record<string, Record<string,
       const key = k.trim()
       const value = rest.join('=').trim()
       sections[current][key] = value
+      lastKey = key
+      continue
+    }
+    // PlatformIO allows multiline values; indented lines continue the previous key.
+    if (current && lastKey && /^\s+/.test(line)) {
+      const prev = sections[current][lastKey] ?? ''
+      sections[current][lastKey] = prev ? `${prev}\n${trimmed}` : trimmed
     }
   }
   return sections
@@ -34,23 +44,6 @@ export function extractEnvNamesFromSections(sections: Record<string, Record<stri
 }
 
 export type VirtualFileMap = Record<string, string>
-
-/** Strip first path segment (GitHub zip root folder). Captures *.ini and meshforge.yaml. */
-export function normalizeZipPaths(files: Record<string, Uint8Array>, decode: (u: Uint8Array) => string): VirtualFileMap {
-  const out: VirtualFileMap = {}
-  for (const path of Object.keys(files)) {
-    const parts = path.split('/').filter(Boolean)
-    if (parts.length < 2) continue
-    const rel = parts.slice(1).join('/')
-    if (!rel.endsWith('.ini') && rel !== 'meshforge.yaml') continue
-    try {
-      out[rel] = decode(files[path])
-    } catch {
-      // skip binary
-    }
-  }
-  return out
-}
 
 /** Aggregate all PlatformIO sections from every .ini file in the virtual file map. */
 function aggregateIniSections(files: VirtualFileMap): Record<string, Record<string, string>> {

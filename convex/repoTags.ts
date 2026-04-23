@@ -96,7 +96,7 @@ export const refresh = action({
     const homepage = (repoJson.homepage ?? "").trim()
     const defaultBranch = (repoJson.default_branch ?? "").trim() || undefined
 
-    // Fetch meshforge.yaml from the default branch (no ref = default branch).
+    // meshforge.yaml from the repo default branch (Contents API with no `ref` = default).
     let meshforgeConfig: MeshforgeConfig | null = null
     const yamlRes = await fetch(
       `https://api.github.com/repos/${args.owner}/${args.repo}/contents/meshforge.yaml`,
