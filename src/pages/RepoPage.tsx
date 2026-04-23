@@ -74,17 +74,22 @@ export default function RepoPage() {
     if (sourceRef) return
     if (tagData === undefined || !tagData.row) return
     const tags = tagData.row.tags
+    const defaultBranch = (tagData.row as { defaultBranch?: string }).defaultBranch
     if (tags.length > 0) {
       const allSorted = sortTagNames(tags.map(t => t.name))
       const cfg = tagData.row.meshforgeConfig as MeshforgeConfig | null | undefined
       const candidates = cfg ? filterTagNames(allSorted, cfg) : allSorted
-      // Fall back to unfiltered list when the profile leaves nothing (e.g. no matching tags yet)
-      const latest = (candidates.length > 0 ? candidates : allSorted)[0]
-      if (!latest) return
-      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+      const latest = candidates[0]
+      if (latest) {
+        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+        return
+      }
+      // Profile filtered out all tags; use default branch when available.
+      if (defaultBranch) {
+        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
+      }
     } else {
       // No tags — redirect to the repo's default branch if known
-      const defaultBranch = (tagData.row as { defaultBranch?: string }).defaultBranch
       if (!defaultBranch) return
       navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
     }
@@ -243,8 +248,20 @@ export default function RepoPage() {
     const defaultBranch = (tagData?.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
     const reinjected = new Set(filtered.map(n => n.toLowerCase()))
     const extras: string[] = []
-    if (sourceRef && !reinjected.has(sourceRef.toLowerCase())) extras.push(sourceRef)
-    if (defaultBranch && !reinjected.has(defaultBranch.toLowerCase())) extras.push(defaultBranch)
+    if (sourceRef) {
+      const key = sourceRef.toLowerCase()
+      if (!reinjected.has(key)) {
+        extras.push(sourceRef)
+        reinjected.add(key)
+      }
+    }
+    if (defaultBranch) {
+      const key = defaultBranch.toLowerCase()
+      if (!reinjected.has(key)) {
+        extras.push(defaultBranch)
+        reinjected.add(key)
+      }
+    }
     return extras.length > 0 ? sortTagNames([...filtered, ...extras]) : filtered
   }, [tagOptions, meshforgeConfig, sourceRef, tagData?.row])
   const filteredEnvNames = useMemo(
