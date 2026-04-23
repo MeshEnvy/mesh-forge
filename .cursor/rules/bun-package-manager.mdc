@@ -14,4 +14,4 @@ This project uses **Bun** (`bun.lock`). Do **not** use `npm install`, `npm run`,
 
 If both `package-lock.json` and `bun.lock` appear, **remove `package-lock.json`** and standardize on Bun.
 
-Vendor subprojects under `vendor/` may use their own package manager; do not change those unless the task is explicitly about them.
+Sample vendored trees under `samples/projects/` may use their own package manager; do not change those unless the task is explicitly about them.
