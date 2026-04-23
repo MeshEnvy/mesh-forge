@@ -18,6 +18,8 @@ type ComboboxFieldProps = {
   clearSelectionLabel?: string
   /** Match by letters/digits only (case-insensitive); ignores spaces and punctuation in query and options. */
   filterNormalize?: boolean
+  /** Optional display formatter; keeps option values stable while changing UI labels. */
+  displayValue?: (value: string) => string
 }
 
 function normalizeForFilter(s: string): string {
@@ -29,15 +31,16 @@ function buildRows(
   filter: string,
   clearSelectionLabel: string | undefined,
   value: string,
-  filterNormalize: boolean
+  filterNormalize: boolean,
+  displayValue: (value: string) => string
 ): Row[] {
   let filtered: readonly string[]
   if (filterNormalize) {
     const nq = normalizeForFilter(filter)
-    filtered = !nq ? [...options] : options.filter(o => normalizeForFilter(o).includes(nq))
+    filtered = !nq ? [...options] : options.filter(o => normalizeForFilter(displayValue(o)).includes(nq))
   } else {
     const q = filter.trim().toLowerCase()
-    filtered = !q ? [...options] : options.filter(o => o.toLowerCase().includes(q))
+    filtered = !q ? [...options] : options.filter(o => displayValue(o).toLowerCase().includes(q))
   }
   const r: Row[] = []
   if (clearSelectionLabel && value) r.push({ kind: 'clear' })
@@ -66,7 +69,9 @@ export function ComboboxField({
   layout = 'stacked',
   clearSelectionLabel,
   filterNormalize = false,
+  displayValue,
 }: ComboboxFieldProps) {
+  const renderValue = displayValue ?? (v => v)
   const rid = useId().replace(/:/g, '')
   const triggerId = id ?? `cb-${rid}`
   const labelId = `${triggerId}-label`
@@ -78,8 +83,8 @@ export function ComboboxField({
   const syncHighlightAfterOpenRef = useRef(false)
 
   const rows = useMemo(
-    () => buildRows(options, filter, clearSelectionLabel, value, filterNormalize),
-    [options, filter, clearSelectionLabel, value, filterNormalize]
+    () => buildRows(options, filter, clearSelectionLabel, value, filterNormalize, renderValue),
+    [options, filter, clearSelectionLabel, value, filterNormalize, renderValue]
   )
 
   const handleOpenChange = (next: boolean) => {
@@ -181,7 +186,9 @@ export function ComboboxField({
             aria-labelledby={labelId}
             className={cn(triggerClass, 'inline-flex items-center justify-between gap-1 text-left font-normal')}
           >
-            <span className={cn('min-w-0 truncate', !value && 'text-slate-600')}>{value || placeholder}</span>
+            <span className={cn('min-w-0 truncate', !value && 'text-slate-600')}>
+              {value ? renderValue(value) : placeholder}
+            </span>
             <ChevronDown className="size-4 shrink-0 opacity-60" aria-hidden />
           </button>
         </PopoverTrigger>
@@ -227,7 +234,7 @@ export function ComboboxField({
                   {row.kind === 'clear' ? (
                     <span className="text-slate-400">{clearSelectionLabel}</span>
                   ) : (
-                    row.value
+                    renderValue(row.value)
                   )}
                 </li>
               ))
