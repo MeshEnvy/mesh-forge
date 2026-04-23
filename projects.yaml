@@ -6,7 +6,7 @@ projects:
     logo: https://avatars.githubusercontent.com/u/237130814?v=4&s=128
   - title: Lotato
     subtitle: 100% on-device Potato Mesh ingestor for MeshCore.
-    url: https://github.com/MeshEnvy/MeshCore-lotato
+    url: https://github.com/MeshEnvy/lotato
     new: true
     logo: https://avatars.githubusercontent.com/u/237130814?v=4&s=128
   - title: Mesh64
