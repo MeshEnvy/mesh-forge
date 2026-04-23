@@ -1,0 +1,23 @@
+---
+description: Never run Convex codegen from the agent; _generated is the user's dev loop.
+alwaysApply: true
+---
+
+# Convex codegen — agent forbidden
+
+**Do not run Convex codegen in this workspace, ever.** No exceptions for TypeScript errors, missing `api.*` / `internal.*` references, stale `convex/_generated`, or “finishing” a Convex edit.
+
+Forbidden invocations include (non-exhaustive):
+
+- `bunx convex codegen`
+- `npx convex codegen`
+- `pnpm convex codegen`
+- `yarn convex codegen`
+- Any script or shell that exists only to run `convex codegen`
+
+**Do not** use `convex dev` or `convex dev --once` **as a stand-in for codegen** (only to refresh `convex/_generated/` or silence missing-`api.*` TypeScript errors). Other Convex CLI commands are governed by task-specific rules; this rule is about **never driving codegen** from the agent.
+
+## What to do instead
+
+- Edit `convex/` source correctly; treat `convex/_generated/` as **read-only** from the agent’s perspective.
+- If generated types lag behind new modules or exports, **note it briefly in prose** (e.g. “types may be stale until your Convex dev loop updates `_generated`”). **Do not** run any Convex CLI to fix it, **do not** put codegen or dev-once on your task list, and **do not** end replies with “run `convex codegen`” or equivalent as a required step.

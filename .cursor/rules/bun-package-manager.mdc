@@ -9,7 +9,7 @@ This project uses **Bun** (`bun.lock`). Do **not** use `npm install`, `npm run`,
 
 - **Install:** `bun install`
 - **Scripts:** `bun run <script>` (e.g. `bun run dev`, `bun run build`)
-- **Convex CLI:** `bunx convex ...` (e.g. `bunx convex dev`, `bunx convex deploy`)
+- **Convex CLI:** `bunx convex ...` (e.g. `bunx convex dev`, `bunx convex deploy`). **Never** `bunx convex codegen` — see `convex-no-codegen.mdc`.
 - **Other one-shot CLIs:** prefer `bunx <pkg>` over `npx`
 
 If both `package-lock.json` and `bun.lock` appear, **remove `package-lock.json`** and standardize on Bun.
