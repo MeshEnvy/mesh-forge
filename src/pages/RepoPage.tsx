@@ -117,6 +117,7 @@ export default function RepoPage() {
   const [refError, setRefError] = useState<string | null>(null)
   const [pendingTagRefreshValidation, setPendingTagRefreshValidation] = useState(false)
   const [isRefreshingTags, setIsRefreshingTags] = useState(false)
+  const [readmeRefreshTick, setReadmeRefreshTick] = useState(0)
   useEffect(() => {
     if (!owner || !repo || !effectiveRef) return
     let cancelled = false
@@ -197,7 +198,7 @@ export default function RepoPage() {
     return () => {
       cancelled = true
     }
-  }, [owner, repo, effectiveRef, fetchReadme, isFlashView])
+  }, [owner, repo, effectiveRef, fetchReadme, isFlashView, readmeRefreshTick])
 
   const readmeMarkdownComponents = useMemo(
     () => ({
@@ -833,7 +834,10 @@ export default function RepoPage() {
                     if (isRefreshingTags) return
                     setIsRefreshingTags(true)
                     void refreshTags({ owner, repo })
-                      .then(() => setPendingTagRefreshValidation(true))
+                      .then(() => {
+                        setPendingTagRefreshValidation(true)
+                        setReadmeRefreshTick(t => t + 1)
+                      })
                       .catch(e => toast.error(String(e)))
                       .finally(() => setIsRefreshingTags(false))
                   }}
