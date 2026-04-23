@@ -46,3 +46,9 @@
 [submodule "vendor/microReticulum-Firmware"]
 	path = vendor/microReticulum-Firmware
 	url = git@github.com:Reticulum-Community/microReticulum_Firmware.git
+[submodule "vendor/potato-mesh"]
+	path = vendor/potato-mesh
+	url = git@github.com:l5yth/potato-mesh.git
+[submodule "vendor/lotato"]
+	path = vendor/lotato
+	url = git@github.com:MeshEnvy/lotato.git

@@ -195,8 +195,12 @@ export async function runEspFlash(options: {
   await transport.disconnect()
 }
 
-/** Conservative default for `runEspFlash` over Web Serial (fewer cable/hub issues than 921600). */
-export const ESP_FLASH_WEB_BAUD = 115200
+/** Supported Web Serial baud rates for ESP flashing. First entry is the default. */
+export const ESP_FLASH_BAUD_OPTIONS = [921600, 460800, 230400, 115200] as const
+export type EspFlashBaud = (typeof ESP_FLASH_BAUD_OPTIONS)[number]
+
+/** Default baud for `runEspFlash` over Web Serial. Matches PlatformIO; lower if cables/hubs are flaky. */
+export const ESP_FLASH_WEB_BAUD: EspFlashBaud = ESP_FLASH_BAUD_OPTIONS[0]
 
 /** Match MeshCore `lib/dfu.js` CDC touch timing (1200 baud → close → wait for re-enumeration). */
 const CDC_TOUCH_OPEN_MS = 100

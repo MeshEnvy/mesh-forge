@@ -30,6 +30,24 @@ import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
 const MESH_FORGE_ACTIONS_REPO = "MeshEnvy/mesh-forge"
 const meshForgeWorkflowUrl = `https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/workflows/custom_build.yml`
 
+function classifyResolveRefError(error: unknown, ref: string): { message: string; shouldRedirectToBase: boolean } {
+  const raw = String(error)
+  const lower = raw.toLowerCase()
+  const isMissingRef =
+    lower.includes("no commit found for sha") ||
+    lower.includes("couldn't find remote ref") ||
+    lower.includes("unknown revision or path not in the working tree")
+
+  if (isMissingRef) {
+    return {
+      message: `Ref "${ref}" was not found.`,
+      shouldRedirectToBase: true,
+    }
+  }
+
+  return { message: raw, shouldRedirectToBase: false }
+}
+
 export default function RepoPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -74,17 +92,22 @@ export default function RepoPage() {
     if (sourceRef) return
     if (tagData === undefined || !tagData.row) return
     const tags = tagData.row.tags
+    const defaultBranch = (tagData.row as { defaultBranch?: string }).defaultBranch
     if (tags.length > 0) {
       const allSorted = sortTagNames(tags.map(t => t.name))
       const cfg = tagData.row.meshforgeConfig as MeshforgeConfig | null | undefined
       const candidates = cfg ? filterTagNames(allSorted, cfg) : allSorted
-      // Fall back to unfiltered list when the profile leaves nothing (e.g. no matching tags yet)
-      const latest = (candidates.length > 0 ? candidates : allSorted)[0]
-      if (!latest) return
-      navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+      const latest = candidates[0]
+      if (latest) {
+        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(latest, null)}`, { replace: true })
+        return
+      }
+      // Profile filtered out all tags; use default branch when available.
+      if (defaultBranch) {
+        navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
+      }
     } else {
       // No tags — redirect to the repo's default branch if known
-      const defaultBranch = (tagData.row as { defaultBranch?: string }).defaultBranch
       if (!defaultBranch) return
       navigate(`/${ownerParam}/${repoParam}/tree/${buildTreeSplatPath(defaultBranch, null)}`, { replace: true })
     }
@@ -92,6 +115,10 @@ export default function RepoPage() {
 
   const [resolvedSha, setResolvedSha] = useState<string | null>(null)
   const [refError, setRefError] = useState<string | null>(null)
+  const [pendingTagRefreshValidation, setPendingTagRefreshValidation] = useState(false)
+  const [isRefreshingRepo, setIsRefreshingRepo] = useState(false)
+  const [refreshResolveTick, setRefreshResolveTick] = useState(0)
+  const [readmeRefreshTick, setReadmeRefreshTick] = useState(0)
   useEffect(() => {
     if (!owner || !repo || !effectiveRef) return
     let cancelled = false
@@ -102,12 +129,31 @@ export default function RepoPage() {
         if (!cancelled) setResolvedSha(sha)
       })
       .catch(e => {
-        if (!cancelled) setRefError(String(e))
+        if (cancelled) return
+        const { message, shouldRedirectToBase } = classifyResolveRefError(e, effectiveRef)
+        setRefError(message)
+        if (shouldRedirectToBase) {
+          navigate(`/${ownerParam}/${repoParam}`, { replace: true })
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [owner, repo, effectiveRef, resolveRef])
+  }, [owner, repo, effectiveRef, resolveRef, navigate, ownerParam, repoParam, refreshResolveTick])
+
+  useEffect(() => {
+    if (!pendingTagRefreshValidation || !sourceRef || tagData === undefined) return
+    setPendingTagRefreshValidation(false)
+    const tags = tagData.row?.tags ?? []
+    const defaultBranch = (tagData.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
+    const normalizedSourceRef = sourceRef.toLowerCase()
+    const refStillExists =
+      tags.some(t => t.name.toLowerCase() === normalizedSourceRef) ||
+      defaultBranch?.toLowerCase() === normalizedSourceRef
+    if (!refStillExists) {
+      navigate(`/${ownerParam}/${repoParam}`, { replace: true })
+    }
+  }, [pendingTagRefreshValidation, sourceRef, tagData, navigate, ownerParam, repoParam])
 
   useEffect(() => {
     if (!owner || !repo || !effectiveRef || !resolvedSha) return
@@ -153,7 +199,7 @@ export default function RepoPage() {
     return () => {
       cancelled = true
     }
-  }, [owner, repo, effectiveRef, fetchReadme, isFlashView])
+  }, [owner, repo, effectiveRef, fetchReadme, isFlashView, readmeRefreshTick])
 
   const readmeMarkdownComponents = useMemo(
     () => ({
@@ -227,10 +273,64 @@ export default function RepoPage() {
     const defaultBranch = (tagData?.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
     const reinjected = new Set(filtered.map(n => n.toLowerCase()))
     const extras: string[] = []
-    if (sourceRef && !reinjected.has(sourceRef.toLowerCase())) extras.push(sourceRef)
-    if (defaultBranch && !reinjected.has(defaultBranch.toLowerCase())) extras.push(defaultBranch)
+    if (sourceRef) {
+      const key = sourceRef.toLowerCase()
+      if (!reinjected.has(key)) {
+        extras.push(sourceRef)
+        reinjected.add(key)
+      }
+    }
+    if (defaultBranch) {
+      const key = defaultBranch.toLowerCase()
+      if (!reinjected.has(key)) {
+        extras.push(defaultBranch)
+        reinjected.add(key)
+      }
+    }
     return extras.length > 0 ? sortTagNames([...filtered, ...extras]) : filtered
   }, [tagOptions, meshforgeConfig, sourceRef, tagData?.row])
+  const [refShaByName, setRefShaByName] = useState<Record<string, string>>({})
+  useEffect(() => {
+    setRefShaByName({})
+  }, [owner, repo])
+
+  const tagNameSet = useMemo(() => new Set((tagData?.row?.tags ?? []).map(t => t.name.toLowerCase())), [tagData?.row?.tags])
+  const branchLikeTagOptions = useMemo(
+    () => filteredTagOptions.filter(name => !tagNameSet.has(name.toLowerCase())),
+    [filteredTagOptions, tagNameSet]
+  )
+  useEffect(() => {
+    if (!owner || !repo || branchLikeTagOptions.length === 0) return
+    let cancelled = false
+    const missing = branchLikeTagOptions.filter(name => !refShaByName[name])
+    if (missing.length === 0) return
+    void Promise.all(
+      missing.map(async name => {
+        const sha = await resolveRef({ owner, repo, ref: name })
+        return { name, sha }
+      })
+    )
+      .then(entries => {
+        if (cancelled) return
+        setRefShaByName(prev => {
+          const next = { ...prev }
+          for (const { name, sha } of entries) next[name] = sha
+          return next
+        })
+      })
+      .catch(() => {
+        // Ignore failed branch ref lookups; keep dropdown usable without SHA badges.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [owner, repo, branchLikeTagOptions, refShaByName, resolveRef])
+
+  const displayRefOption = (name: string) => {
+    if (tagNameSet.has(name.toLowerCase())) return name
+    const sha = refShaByName[name]
+    return sha ? `${name} (${sha.slice(0, 7)})` : name
+  }
   const filteredEnvNames = useMemo(
     () => filterEnvNames(envNames, meshforgeConfig, envCapabilities ?? {}, tagDraft),
     [envNames, meshforgeConfig, envCapabilities, tagDraft]
@@ -643,13 +743,14 @@ export default function RepoPage() {
             <div className="min-w-0 space-y-5 [grid-area:repo-main]">
               <div className="flex flex-nowrap items-end gap-2 overflow-x-auto border-b border-slate-800 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <ComboboxField
-                  label="Tag"
+                  label="Ref"
                   layout="inline"
                   id="mesh-forge-tag"
                   options={filteredTagOptions}
                   value={tagDraft}
-                  placeholder="--tag--"
-                  clearSelectionLabel="Clear tag"
+                  displayValue={displayRefOption}
+                  placeholder="--ref--"
+                  clearSelectionLabel="Clear ref"
                   onChange={v => {
                     setTagDraft(v)
                     if (v === "") {
@@ -771,11 +872,24 @@ export default function RepoPage() {
                   variant="outline"
                   size="sm"
                   className="w-full border-slate-600 text-slate-300 hover:border-slate-500 hover:bg-slate-800 hover:text-white"
-                  title="Refresh tags from GitHub"
-                  onClick={() => void refreshTags({ owner, repo }).catch(e => toast.error(String(e)))}
+                  title="Refresh repo metadata from GitHub"
+                  disabled={isRefreshingRepo}
+                  onClick={() => {
+                    if (isRefreshingRepo) return
+                    // Force re-resolve current ref so moving branches pick up latest SHA.
+                    setRefreshResolveTick(t => t + 1)
+                    setReadmeRefreshTick(t => t + 1)
+                    setIsRefreshingRepo(true)
+                    void refreshTags({ owner, repo })
+                      .then(() => {
+                        setPendingTagRefreshValidation(true)
+                      })
+                      .catch(e => toast.error(String(e)))
+                      .finally(() => setIsRefreshingRepo(false))
+                  }}
                 >
-                  <RefreshCw className="size-3.5" />
-                  Refresh tags
+                  <RefreshCw className={`size-3.5 ${isRefreshingRepo ? "animate-spin" : ""}`} />
+                  {isRefreshingRepo ? "Refreshing…" : "Refresh repo"}
                 </Button>
               </div>
             </aside>

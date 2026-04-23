@@ -23,8 +23,7 @@ export const dispatchRepoBuild = action({
     }
 
     const isDev = process.env.CONVEX_ENV === "dev"
-    const workflowFile = isDev ? "custom_build_test.yml" : "custom_build.yml"
-    const workflowRef = isDev ? "v2" : "main"
+    const workflowRef = isDev ? "develop" : "main"
 
     const payload = {
       ref: workflowRef,
@@ -40,7 +39,7 @@ export const dispatchRepoBuild = action({
       },
     }
 
-    const url = `https://api.github.com/repos/MeshEnvy/mesh-forge/actions/workflows/${workflowFile}/dispatches`
+    const url = `https://api.github.com/repos/MeshEnvy/mesh-forge/actions/workflows/custom_build.yml/dispatches`
     const headers = {
       Authorization: `Bearer ${githubToken}`,
       Accept: "application/vnd.github.v3+json",
