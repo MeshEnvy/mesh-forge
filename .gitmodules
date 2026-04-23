@@ -13,10 +13,10 @@
 [submodule "samples/reference/meshtastic-python"]
 	path = samples/reference/meshtastic-python
 	url = git@github.com:MeshEnvy/meshtastic-python.git
-[submodule "samples/projects/meshtastic-web"]
+[submodule "samples/reference/meshtastic-web"]
 	path = samples/reference/meshtastic-web
 	url = git@github.com:meshtastic/web.git
-[submodule "samples/projects/microReticulum"]
+[submodule "samples/reference/microReticulum"]
 	path = samples/reference/microReticulum
 	url = git@github.com:Reticulum-Community/microReticulum.git
 [submodule "samples/projects/microReticulum-Firmware"]
