@@ -92,6 +92,8 @@ export default function RepoPage() {
 
   const [resolvedSha, setResolvedSha] = useState<string | null>(null)
   const [refError, setRefError] = useState<string | null>(null)
+  const [pendingTagRefreshValidation, setPendingTagRefreshValidation] = useState(false)
+  const [isRefreshingTags, setIsRefreshingTags] = useState(false)
   useEffect(() => {
     if (!owner || !repo || !effectiveRef) return
     let cancelled = false
@@ -108,6 +110,20 @@ export default function RepoPage() {
       cancelled = true
     }
   }, [owner, repo, effectiveRef, resolveRef])
+
+  useEffect(() => {
+    if (!pendingTagRefreshValidation || !sourceRef || tagData === undefined) return
+    setPendingTagRefreshValidation(false)
+    const tags = tagData.row?.tags ?? []
+    const defaultBranch = (tagData.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
+    const normalizedSourceRef = sourceRef.toLowerCase()
+    const refStillExists =
+      tags.some(t => t.name.toLowerCase() === normalizedSourceRef) ||
+      defaultBranch?.toLowerCase() === normalizedSourceRef
+    if (!refStillExists) {
+      navigate(`/${ownerParam}/${repoParam}`, { replace: true })
+    }
+  }, [pendingTagRefreshValidation, sourceRef, tagData, navigate, ownerParam, repoParam])
 
   useEffect(() => {
     if (!owner || !repo || !effectiveRef || !resolvedSha) return
@@ -772,10 +788,18 @@ export default function RepoPage() {
                   size="sm"
                   className="w-full border-slate-600 text-slate-300 hover:border-slate-500 hover:bg-slate-800 hover:text-white"
                   title="Refresh tags from GitHub"
-                  onClick={() => void refreshTags({ owner, repo }).catch(e => toast.error(String(e)))}
+                  disabled={isRefreshingTags}
+                  onClick={() => {
+                    if (isRefreshingTags) return
+                    setIsRefreshingTags(true)
+                    void refreshTags({ owner, repo })
+                      .then(() => setPendingTagRefreshValidation(true))
+                      .catch(e => toast.error(String(e)))
+                      .finally(() => setIsRefreshingTags(false))
+                  }}
                 >
-                  <RefreshCw className="size-3.5" />
-                  Refresh tags
+                  <RefreshCw className={`size-3.5 ${isRefreshingTags ? "animate-spin" : ""}`} />
+                  {isRefreshingTags ? "Refreshing…" : "Refresh tags"}
                 </Button>
               </div>
             </aside>
