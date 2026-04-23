@@ -1,54 +1,27 @@
-[submodule "vendor/mpm"]
-	path = vendor/mpm
-	url = git@github.com:MeshEnvy/mpm.git
-[submodule "vendor/lobbs"]
-	path = vendor/lobbs
-	url = git@github.com:MeshEnvy/lobbs.git
-[submodule "vendor/lodb"]
-	path = vendor/lodb
-	url = git@github.com:MeshEnvy/lodb.git
-[submodule "vendor/meshscript"]
-	path = vendor/meshscript
-	url = git@github.com:MeshEnvy/meshscript.git
-[submodule "vendor/meshcore-flasher"]
-	path = vendor/meshcore-flasher
-	url = git@github.com:meshcore-dev/flasher.meshcore.dev.git
-[submodule "vendor/lofs"]
-	path = vendor/lofs
-	url = git@github.com:MeshEnvy/lofs.git
-[submodule "vendor/meshtastic-firmware"]
-	path = vendor/meshtastic-firmware
+[submodule "samples/projects/meshtastic-firmware"]
+	path = samples/projects/meshtastic-firmware
 	url = git@github.com:MeshEnvy/firmware.git
-[submodule "vendor/meshcore-firmware"]
-	path = vendor/meshcore-firmware
+[submodule "samples/projects/meshcore-firmware"]
+	path = samples/projects/meshcore-firmware
 	url = git@github.com:MeshEnvy/MeshCore.git
-[submodule "vendor/meshtastic-baymesh"]
-	path = vendor/meshtastic-baymesh
+[submodule "samples/projects/meshtastic-baymesh"]
+	path = samples/projects/meshtastic-baymesh
 	url = git@github.com:RCGV1/firmware-Fork.git
-[submodule "vendor/meshcore-lotato"]
-	path = vendor/meshcore-lotato
-	url = git@github.com:MeshEnvy/MeshCore-lotato.git
-[submodule "vendor/TinyBBS"]
-	path = vendor/TinyBBS
+[submodule "samples/projects/TinyBBS"]
+	path = samples/projects/TinyBBS
 	url = git@github.com:MeshEnvy/TinyBBS.git
-[submodule "vendor/meshtastic-python"]
-	path = vendor/meshtastic-python
+[submodule "samples/reference/meshtastic-python"]
+	path = samples/reference/meshtastic-python
 	url = git@github.com:MeshEnvy/meshtastic-python.git
-[submodule "vendor/meshtastic-web"]
-	path = vendor/meshtastic-web
+[submodule "samples/projects/meshtastic-web"]
+	path = samples/projects/meshtastic-web
 	url = git@github.com:meshtastic/web.git
-[submodule "vendor/lobbs-meshtastic-firmware"]
-	path = vendor/lobbs-meshtastic-firmware
-	url = git@github.com:benallfree/lobbs-meshtstic-firmware.git
-[submodule "vendor/microReticulum"]
-	path = vendor/microReticulum
+[submodule "samples/projects/microReticulum"]
+	path = samples/projects/microReticulum
 	url = git@github.com:Reticulum-Community/microReticulum.git
-[submodule "vendor/microReticulum-Firmware"]
-	path = vendor/microReticulum-Firmware
+[submodule "samples/projects/microReticulum-Firmware"]
+	path = samples/projects/microReticulum-Firmware
 	url = git@github.com:Reticulum-Community/microReticulum_Firmware.git
-[submodule "vendor/potato-mesh"]
-	path = vendor/potato-mesh
-	url = git@github.com:l5yth/potato-mesh.git
-[submodule "vendor/lotato"]
-	path = vendor/lotato
+[submodule "samples/projects/lotato"]
+	path = samples/projects/lotato
 	url = git@github.com:MeshEnvy/lotato.git

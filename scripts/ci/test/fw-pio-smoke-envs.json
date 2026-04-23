@@ -2,34 +2,24 @@
   "description": "PlatformIO environment names for Heltec WiFi LoRa 32 V3 and RAK WisBlock 4631, per vendored tree. Names taken from PIO UnknownEnvNamesError listings (pio run -e __invalid__).",
   "projects": [
     {
-      "path": "vendor/microReticulum-Firmware",
+      "path": "samples/projects/microReticulum-Firmware",
       "heltec_v3": "heltec_wifi_lora_32_V3",
       "rak_4631": "wiscore_rak4631"
     },
     {
-      "path": "vendor/meshtastic-firmware",
+      "path": "samples/projects/meshtastic-firmware",
       "heltec_v3": "heltec-v3",
       "rak_4631": "rak4631"
     },
     {
-      "path": "vendor/lobbs-meshtastic-firmware",
+      "path": "samples/projects/meshtastic-baymesh",
       "heltec_v3": "heltec-v3",
       "rak_4631": "rak4631"
     },
     {
-      "path": "vendor/meshtastic-baymesh",
-      "heltec_v3": "heltec-v3",
-      "rak_4631": "rak4631"
-    },
-    {
-      "path": "vendor/meshcore-firmware",
+      "path": "samples/projects/meshcore-firmware",
       "heltec_v3": "Heltec_v3_companion_radio_ble",
       "rak_4631": "RAK_4631_companion_radio_ble"
-    },
-    {
-      "path": "vendor/meshcore-lotato",
-      "heltec_v3": "Heltec_v3_repeater",
-      "rak_4631": "RAK_4631_repeater"
     }
   ]
 }

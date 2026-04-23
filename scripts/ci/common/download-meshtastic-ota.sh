@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download BLE/unified OTA companion image into PlatformIO BUILD_DIR when Meshtastic *.mt.json is present.
-# No-op for non-Meshtastic builds (no mt.json). Mirrors vendor/meshtastic-firmware/.github/workflows/build_firmware.yml.
+# No-op for non-Meshtastic builds (no mt.json). Mirrors samples/projects/meshtastic-firmware/.github/workflows/build_firmware.yml.
 set -euo pipefail
 
 BUILD_DIR="${1:?usage: download-meshtastic-ota.sh BUILD_DIR}"

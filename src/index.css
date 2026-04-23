@@ -1,4 +1,4 @@
-/* Disable auto scan of the whole repo root — `vendor/` alone is ~100k+ files and stalls the Oxide scanner. */
+/* Disable auto scan of the whole repo root — `samples/projects/` vendored trees are huge and stall the Oxide scanner. */
 @import "tailwindcss" source(none);
 @plugin "@tailwindcss/typography";
 
