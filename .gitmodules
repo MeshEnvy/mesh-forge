@@ -1,21 +1,6 @@
-[submodule "vendor/mpm"]
-	path = vendor/mpm
-	url = git@github.com:MeshEnvy/mpm.git
-[submodule "vendor/lobbs"]
-	path = vendor/lobbs
-	url = git@github.com:MeshEnvy/lobbs.git
-[submodule "vendor/lodb"]
-	path = vendor/lodb
-	url = git@github.com:MeshEnvy/lodb.git
-[submodule "vendor/meshscript"]
-	path = vendor/meshscript
-	url = git@github.com:MeshEnvy/meshscript.git
 [submodule "vendor/meshcore-flasher"]
 	path = vendor/meshcore-flasher
 	url = git@github.com:meshcore-dev/flasher.meshcore.dev.git
-[submodule "vendor/lofs"]
-	path = vendor/lofs
-	url = git@github.com:MeshEnvy/lofs.git
 [submodule "vendor/meshtastic-firmware"]
 	path = vendor/meshtastic-firmware
 	url = git@github.com:MeshEnvy/firmware.git
@@ -34,18 +19,12 @@
 [submodule "vendor/meshtastic-web"]
 	path = vendor/meshtastic-web
 	url = git@github.com:meshtastic/web.git
-[submodule "vendor/lobbs-meshtastic-firmware"]
-	path = vendor/lobbs-meshtastic-firmware
-	url = git@github.com:benallfree/lobbs-meshtstic-firmware.git
 [submodule "vendor/microReticulum"]
 	path = vendor/microReticulum
 	url = git@github.com:Reticulum-Community/microReticulum.git
 [submodule "vendor/microReticulum-Firmware"]
 	path = vendor/microReticulum-Firmware
 	url = git@github.com:Reticulum-Community/microReticulum_Firmware.git
-[submodule "vendor/potato-mesh"]
-	path = vendor/potato-mesh
-	url = git@github.com:l5yth/potato-mesh.git
 [submodule "vendor/lotato"]
 	path = vendor/lotato
 	url = git@github.com:MeshEnvy/lotato.git

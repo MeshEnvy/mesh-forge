@@ -12,11 +12,6 @@
       "rak_4631": "rak4631"
     },
     {
-      "path": "vendor/lobbs-meshtastic-firmware",
-      "heltec_v3": "heltec-v3",
-      "rak_4631": "rak4631"
-    },
-    {
       "path": "vendor/meshtastic-baymesh",
       "heltec_v3": "heltec-v3",
       "rak_4631": "rak4631"
