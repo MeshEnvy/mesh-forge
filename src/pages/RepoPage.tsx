@@ -30,6 +30,24 @@ import { buildTreeSplatPath, parseTreeSplat } from "../lib/repoTreeUrl"
 const MESH_FORGE_ACTIONS_REPO = "MeshEnvy/mesh-forge"
 const meshForgeWorkflowUrl = `https://github.com/${MESH_FORGE_ACTIONS_REPO}/actions/workflows/custom_build.yml`
 
+function classifyResolveRefError(error: unknown, ref: string): { message: string; shouldRedirectToBase: boolean } {
+  const raw = String(error)
+  const lower = raw.toLowerCase()
+  const isMissingRef =
+    lower.includes("no commit found for sha") ||
+    lower.includes("couldn't find remote ref") ||
+    lower.includes("unknown revision or path not in the working tree")
+
+  if (isMissingRef) {
+    return {
+      message: `Ref "${ref}" was not found.`,
+      shouldRedirectToBase: true,
+    }
+  }
+
+  return { message: raw, shouldRedirectToBase: false }
+}
+
 export default function RepoPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -109,12 +127,17 @@ export default function RepoPage() {
         if (!cancelled) setResolvedSha(sha)
       })
       .catch(e => {
-        if (!cancelled) setRefError(String(e))
+        if (cancelled) return
+        const { message, shouldRedirectToBase } = classifyResolveRefError(e, effectiveRef)
+        setRefError(message)
+        if (shouldRedirectToBase) {
+          navigate(`/${ownerParam}/${repoParam}`, { replace: true })
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [owner, repo, effectiveRef, resolveRef])
+  }, [owner, repo, effectiveRef, resolveRef, navigate, ownerParam, repoParam])
 
   useEffect(() => {
     if (!pendingTagRefreshValidation || !sourceRef || tagData === undefined) return
