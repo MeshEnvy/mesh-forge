@@ -9,6 +9,7 @@ import LegalPrivacyPage from "./pages/LegalPrivacyPage"
 import LegalTermsPage from "./pages/LegalTermsPage"
 import NotFoundPage from "./pages/NotFoundPage"
 import RepoPage from "./pages/RepoPage"
+import MapPage from "./pages/MapPage"
 
 function Layout({ children }: { children: React.ReactNode }) {
   const loc = useLocation()
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/flasher" element={<Navigate to="/" replace />} />
         <Route path="/flasher/*" element={<Navigate to="/" replace />} />
         <Route path="/privacy" element={<LegalPrivacyPage />} />
+        <Route path="/map" element={<MapPage />} />
         <Route path="/terms" element={<LegalTermsPage />} />
         <Route path="/license" element={<LegalLicensePage />} />
         <Route path="/admin" element={<AdminPage />} />
