@@ -169,7 +169,8 @@ jobs:
         id: pio
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         shell: bash
         run: |
@@ -179,8 +180,8 @@ jobs:
           BUILD_DIR_ABS="$ROOT/.pio/build/${{ inputs.target_env }}"
           ARTIFACT_NAME="firmware-${{ inputs.build_key }}-${{ github.run_id }}.tar.gz"
           MESHTASTIC_OTA=1 bash "${{ github.workspace }}/scripts/ci/common/fw-bundle-pipeline.sh" "$ROOT" "$BUILD_DIR_ABS" "/tmp/$ARTIFACT_NAME"
-          OBJECT_PATH="${R2_BUCKET_NAME}/${ARTIFACT_NAME}"
-          bunx wrangler r2 object put "$OBJECT_PATH" --file "/tmp/$ARTIFACT_NAME" --remote
+          bun install --frozen-lockfile --production
+          bun scripts/ci/upload-firmware-r2.ts "/tmp/$ARTIFACT_NAME" "$ARTIFACT_NAME"
           STEP_INDEX=10 LABEL="Firmware bundle uploaded" python3 "${{ github.workspace }}/scripts/ci/report-convex-ci-progress.py"
           echo "r2_key=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
 
