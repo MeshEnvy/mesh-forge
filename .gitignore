@@ -26,3 +26,4 @@ dist-ssr
 .wrangler
 
 __pycache__/
+.env.*
