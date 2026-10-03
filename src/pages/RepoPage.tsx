@@ -116,6 +116,7 @@ export default function RepoPage() {
   const [resolvedSha, setResolvedSha] = useState<string | null>(null)
   const [refError, setRefError] = useState<string | null>(null)
   const [pendingTagRefreshValidation, setPendingTagRefreshValidation] = useState(false)
+  const refreshRequestedAtRef = useRef(0)
   const [isRefreshingRepo, setIsRefreshingRepo] = useState(false)
   const [refreshResolveTick, setRefreshResolveTick] = useState(0)
   const [readmeRefreshTick, setReadmeRefreshTick] = useState(0)
@@ -143,6 +144,8 @@ export default function RepoPage() {
 
   useEffect(() => {
     if (!pendingTagRefreshValidation || !sourceRef || tagData === undefined) return
+    const fetchedAt = tagData.row?.fetchedAt
+    if (fetchedAt == null || fetchedAt < refreshRequestedAtRef.current) return
     setPendingTagRefreshValidation(false)
     const tags = tagData.row?.tags ?? []
     const defaultBranch = (tagData.row as { defaultBranch?: string } | null | undefined)?.defaultBranch
@@ -292,7 +295,7 @@ export default function RepoPage() {
   const [refShaByName, setRefShaByName] = useState<Record<string, string>>({})
   useEffect(() => {
     setRefShaByName({})
-  }, [owner, repo])
+  }, [owner, repo, refreshResolveTick])
 
   const tagNameSet = useMemo(() => new Set((tagData?.row?.tags ?? []).map(t => t.name.toLowerCase())), [tagData?.row?.tags])
   const branchLikeTagOptions = useMemo(
@@ -876,6 +879,7 @@ export default function RepoPage() {
                   disabled={isRefreshingRepo}
                   onClick={() => {
                     if (isRefreshingRepo) return
+                    refreshRequestedAtRef.current = Date.now()
                     // Force re-resolve current ref so moving branches pick up latest SHA.
                     setRefreshResolveTick(t => t + 1)
                     setReadmeRefreshTick(t => t + 1)
