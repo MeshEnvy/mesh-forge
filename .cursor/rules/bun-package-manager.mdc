@@ -1,6 +1,6 @@
 ---
 description: Use Bun for this repo (install, run, build); bunx for Convex CLI and one-off tools.
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Package manager: Bun

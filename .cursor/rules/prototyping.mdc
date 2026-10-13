@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: MeshForge prototyping phase — prefer breaking changes over backward compatibility
+alwaysApply: false
 ---
 
 We are in our prototyping phase right now. Do not code for backward compatibility. Prefer breaking changes.

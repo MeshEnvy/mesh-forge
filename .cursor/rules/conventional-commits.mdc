@@ -1,6 +1,6 @@
 ---
 description: Use Conventional Commits; keep subject under 50 characters.
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Conventional commits

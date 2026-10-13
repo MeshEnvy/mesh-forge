@@ -1,6 +1,6 @@
 ---
 description: Do not run Vite/production builds by default; they freeze this environment.
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Production build (Vite)

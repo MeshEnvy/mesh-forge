@@ -1,6 +1,6 @@
 ---
 description: Environment variable names for MeshForge. Values are secrets. Never commit them.
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Environment variables
